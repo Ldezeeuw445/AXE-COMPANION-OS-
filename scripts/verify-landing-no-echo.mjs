@@ -112,26 +112,15 @@ check("geen kop herhaalt zich binnen één sectie", () => {
   }
 });
 
-check("de alignment-score staat op één plek", () => {
-  // Twee meters met hetzelfde getal lezen als twee metingen van verschillende
-  // dingen. Eén getal, op de plek waar ook staat waar het uit volgt.
-  const plekken = bestanden
-    .filter((p) => gerenderd.has(p.split("/").pop().replace(".tsx", "")))
-    .filter((p) => /alignment/i.test(codeOnly(readFileSync(p, "utf8"))))
-    .filter((p) => /\b75\b/.test(codeOnly(readFileSync(p, "utf8"))));
-  assert.equal(
-    plekken.length,
-    1,
-    `de alignment-score staat in ${plekken.length} secties: ${plekken.map((p) => p.split("/").pop()).join(", ")}`,
-  );
-});
-
-check("elk voorbeeldcijfer draagt nog steeds zijn label", () => {
-  const met = bestanden.filter((p) => codeOnly(readFileSync(p, "utf8")).includes("data-landing-cockpit-example"));
-  assert.ok(met.length >= 1, "geen enkele sectie noemt zijn cijfers nog een voorbeeld");
-  for (const pad of met) {
-    const bron = readFileSync(pad, "utf8");
-    assert.match(bron, /Example —/, `${pad} heeft de haak maar geen zichtbaar label`);
+check("geen voorbeeldcijfers, ook niet met een label", () => {
+  // Luka, 26 nov 2026: geen mock- of demodata op de landing. Een voorbeeld
+  // wordt weggehaald, niet gelabeld.
+  for (const pad of bestanden) {
+    const naam = pad.split("/").pop().replace(".tsx", "");
+    if (!gerenderd.has(naam)) continue;
+    const bron = codeOnly(readFileSync(pad, "utf8"));
+    assert.ok(!bron.includes("data-landing-cockpit-example"), `${naam} toont nog voorbeeldcijfers`);
+    assert.ok(!/Example —|sample behavior map/i.test(bron), `${naam} toont nog een voorbeeld`);
   }
 });
 

@@ -36,13 +36,12 @@ export function LandingFeatureGrid() {
   return (
     <section id="features" className="relative z-10">
       <div className="axe-launch-band">
-        <p className="axe-launch-eyebrow">Built for real accounts</p>
+        <p className="axe-launch-eyebrow">What the app does</p>
         <h2 className="axe-launch-band-title">
-          Native trader feel, <span className="axe-launch-gradient">calmly.</span>
+          Everything on your phone, <span className="axe-launch-gradient">today.</span>
         </h2>
         <p className="axe-launch-band-copy">
-          Each tile is something AXE Companion does today — not a Trading OS desk widget, not a
-          roadmap.
+          Each tile is something AXE Companion does in the live app today — not a roadmap.
         </p>
       </div>
 

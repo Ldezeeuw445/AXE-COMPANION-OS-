@@ -40,7 +40,7 @@ const KAARTEN: readonly Kaart[] = [
     belofte: "See more than the chart.",
     woorden: ["ANALYZE", "AWARE", "ADAPTIVE"],
     tekst:
-      "AXE reads the chart alongside the things that move it: SEC EDGAR filings, world events from GDELT, correlations between the instruments you trade, and your own account — open positions, risk band and journal. What it learns about how you trade shapes the next answer.",
+      "AXE reads the chart alongside the things that move it: SEC EDGAR filings, news, natural events from USGS and NASA, correlations between the instruments you trade, and your own account — open positions, risk and journal. What it learns about how you trade shapes the next answer.",
   },
   {
     letter: "X",
@@ -49,7 +49,7 @@ const KAARTEN: readonly Kaart[] = [
     woorden: ["EXECUTE", "EXPERT", "EXTEND"],
     paars: true,
     tekst:
-      "Place an order on your own MT5 or Alpaca account in one tap. Before anything leaves, the guard checks five limits — news window, weekend, lot size, risk per trade and daily loss — and blocks with the rule named rather than quietly placing something smaller.",
+      "Place an order on your own MT5 or Alpaca account from the dock. Before AXE places anything automatically, the guard checks your limits — news window, weekend, lot size, risk per trade, daily and total loss, and the daily cap on automatic trades — and blocks with the rule named rather than quietly placing something smaller.",
   },
   {
     letter: "E",

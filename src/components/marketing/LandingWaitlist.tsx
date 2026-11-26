@@ -50,9 +50,8 @@ export function LandingWaitlist() {
   return (
     <div id="waitlist" className="scroll-mt-28">
       <p className="text-center text-sm text-white/55">
-        Join the AXE Companion waitlist for Trading OS (desktop) private beta and other coming-soon
-        surfaces. Free is desk-only; AXE Companion on your phone starts at Core. Same login and
-        broker accounts on both.
+        Trading OS, the desktop terminal, is in beta. Leave your email to hear when it opens up.
+        AXE Companion itself is open now — create an account above.
       </p>
       {state === "done" ? (
         <p className="mt-4 text-center text-sm font-medium text-emerald-400/95" role="status">
@@ -80,7 +79,7 @@ export function LandingWaitlist() {
             disabled={state === "sending"}
             className="h-11 shrink-0 rounded-lg border border-cyan-500/30 bg-cyan-500/15 px-5 text-sm font-medium text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-60"
           >
-            {state === "sending" ? "Joining…" : "Join the AXE Companion waitlist"}
+            {state === "sending" ? "Joining…" : "Join the Trading OS beta waitlist"}
           </button>
         </form>
       )}

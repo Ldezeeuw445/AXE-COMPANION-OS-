@@ -1,65 +1,83 @@
 /**
- * Public landing copy for AXE Companion.
+ * Public landing copy for AXE Companion (axecompanion.com).
  *
  * Keep this file dependency-free so `scripts/verify-landing-claims.mjs` can
- * import it with tsx and check the claims against billing + intel sources.
- * Visual chrome lives in the React sections; the promises live here.
+ * import it with tsx and check the claims against billing, intel and the
+ * ecosystem list.
  *
- * Hero copy is the original LaunchHeroExperience ("The trader's phone OS").
- * The feed grid, showcase rows and discipline section are ported from
- * `public/landing/index.html` (last full file at af5b0cd / 9f9351e^) and then
- * trimmed so every sentence matches the app as it ships today. "Your Second
- * Brain For Trading" was only in Luka's screenshots — rebuilt here.
- * Pricing, FAQ, waitlist and legal stay on the current truthful keep-list.
+ * Rewritten 26 Nov 2026 so every sentence is true for the live product:
+ * - AXE Companion is the phone app. Trading OS (tradingosapp.com) is the
+ *   desktop terminal. Same login, same broker accounts, same data; AXE is the
+ *   personal assistant in both.
+ * - No mock screens and no sample numbers. The only screens on the page are
+ *   real captures of the live site, dated. The old no-login hero mock, the
+ *   June screenshots of a retired shell, the example behavior map and the
+ *   empty recording slot are gone.
+ * - Intel tiles say where each feed comes from, checked against
+ *   `intel_sync_log` in the database on 26 Nov 2026.
  */
 
-/** Paid landing CTAs. Stripe Payment Links need a signed-in user id, so this
- *  is the real checkout route: sign in, then `/upgrade`. */
+/** Paid landing CTAs. Checkout needs a signed-in user id, so this is the real
+ *  route: sign in, then `/upgrade`. */
 export const LANDING_CHECKOUT_HREF = "/login?next=/upgrade";
 
 export const LANDING_HERO = {
-  badge: "AXE Companion OS · Early access",
+  badge: "AXE Companion · the phone app",
   titleLead: "AXE Companion.",
-  titleAccent: "The trader's phone OS.",
+  titleAccent: "Your trading desk, in your pocket.",
   body:
-    "AXE Companion is an MT5-native phone OS: chart with indicators and drawings, market depth, news, intel, execution, journal, push alerts, AXE Feed and AXE chat — on one dark surface. Positions and fills sync from MetaApi about every ten minutes.",
+    "The phone app of the AXE ecosystem: chart, positions, journal, alerts, news, intel and AXE — your personal AI assistant. Same login, same broker accounts and the same data as Trading OS on your desktop.",
 } as const;
+
+/** Real captures of the live site. Dated, because a capture is only true for the day it was taken. */
+export const LANDING_REAL_CAPTURES = [
+  {
+    src: "/landing/real/companion-sign-in-2026-11-26.png",
+    alt: "The AXE Companion sign-in screen on a phone",
+    caption: "Sign in",
+  },
+  {
+    src: "/landing/real/companion-create-account-2026-11-26.png",
+    alt: "The AXE Companion create-account screen, with the required terms checkbox",
+    caption: "Create account",
+  },
+] as const;
+
+export const LANDING_CAPTURE_NOTE =
+  "Real screens, captured from axecompanion.com on 26 Nov 2026 at phone size. Nothing on this page is a mock-up.";
 
 export const LANDING_RAIL = [
   "Chart, indicators and drawings",
-  "Market depth drawer",
+  "Bid/ask and depth drawer",
   "News, intel and AXE Feed",
   "One-tap execution dock",
-  "Price alerts, push and drawdown alerts",
+  "Price alerts and push",
 ] as const;
 
-export const LANDING_REVEAL_CARDS = [
-  {
-    orb: "A",
-    title: "Surface the signal.",
-    kicker: "Canvas reveal",
-    body: "One calm card layer that lights up just enough to feel alive, without breaking the dark restraint of the landing page.",
-  },
-  {
-    orb: "X",
-    title: "Quiet, but not flat.",
-    kicker: "App language",
-    body: "Thin Linear-style edges, cyan energy and soft reveal motion keep the whole section feeling like part of AXE itself.",
-  },
-  {
-    orb: "E",
-    title: "Premium motion cues.",
-    kicker: "Depth",
-    body: "Hover brings in a controlled canvas field so the cards feel reactive and expensive, not decorative or noisy.",
-  },
-] as const;
-
-export const LANDING_SECOND_BRAIN = {
-  badge: "AXE Companion OS",
-  titleLead: "AXE Companion.",
-  titleAccent: "Your Second Brain For Trading.",
+export const LANDING_ECOSYSTEM = {
+  badge: "One account · two screens",
+  titleLead: "Phone and desk.",
+  titleAccent: "One source of truth.",
   body:
-    "A trading phone OS with professional charting, market intelligence, execution tools and an AI companion that reads your chart, accounts and journal. You make every trading decision.",
+    "AXE Companion is built for the phone: the handier way to check a chart, a position or your journal, and to ask AXE, wherever you are. Trading OS is the desktop terminal for the big screen. Both apps read and write the same account, so a trade, an alert or a journal note made on one is there on the other.",
+  phone: {
+    name: "AXE Companion",
+    where: "axecompanion.com · phone",
+    points: [
+      "Built phone-first: bottom tabs, one-hand execution dock",
+      "Install it from the browser as an app — no App Store",
+      "Push notifications for your alerts",
+    ],
+  },
+  desk: {
+    name: "Trading OS",
+    where: "tradingosapp.com · desktop",
+    points: [
+      "Built for a big screen: chart, order ticket, news and AXE side by side",
+      "Same login and the same broker accounts",
+      "Same watchlist and alerts",
+    ],
+  },
 } as const;
 
 export const LANDING_FEEDS_BAND = {
@@ -67,126 +85,8 @@ export const LANDING_FEEDS_BAND = {
   titleLead: "AXE intel feeds",
   titleAccent: "beside the chart.",
   body:
-    "Intel sits next to the chart: SEC filings, congressional STOCK Act trades, GDELT, flights, vessels, chokepoints, news, calendar and the AXE Feed. Dark-pool prints, options flow and market tide need a paid source we have not bought — those tiles say not configured.",
+    "Intel sits next to the chart, filled from free and public sources: SEC EDGAR, congressional trade disclosures, FINRA off-exchange volume, Nasdaq delayed option chains, aircraft and vessel positions, natural-hazard events, CISA, EIA and FRED. Every tile says where its numbers come from.",
 } as const;
-
-export const LANDING_DISCIPLINE = {
-  kicker: "Behavior map",
-  title: "Execution discipline, from your fills.",
-  body:
-    "Cockpit (Core) builds a behavior map from your MT5 fills — sessions, instruments, the rules you keep. Fills arrive on the ten-minute MetaApi sync, not tick by tick. Alignment is a Cockpit score, labelled as example chrome on this page.",
-  aside:
-    "The background watcher fires price, drawdown and trailing-stop alerts. Firm rule presets (FTMO models, Upcomers Oracle, and others by name) live in Settings, and AXE autonomy has a daily-limit guard before any automatic order.",
-  quote:
-    "The same dark canvas as Trading OS, the same MT5 execution dock, and a journal of fills you tag yourself — plus an intel layer that watches the board the app actually has keys for.",
-  quoteBy: "AXE Companion · design principle",
-} as const;
-
-export const LANDING_INTRO = {
-  kicker: "First impression",
-  titleLead: "Private. Intelligent.",
-  titleAccent: "Yours.",
-  body: "From the login screen — the particle triangle, a private command channel, one tap to enter. AXE Companion is analytical software, not a licensed adviser or a regulated venue.",
-  loginTitle: "Private command channel",
-  loginBody: "Signed-in workspace · not a social feed · your data stays yours",
-  splashTitle: "Boot sequence",
-  splashBody: "Particle triangle · signed-in workspace · restore your last chart",
-} as const;
-
-export const LANDING_SHOWCASE_BAND = {
-  kicker: "Inside the app",
-  titleLead: "Every screen,",
-  titleAccent: "built for the candle.",
-  body: "From the chart to the cockpit — every pixel is tuned for the trader who needs clarity, not clutter.",
-} as const;
-
-export const LANDING_SHOWCASE: ReadonlyArray<{
-  step: string;
-  title: string;
-  body: string;
-  href: string;
-  cta: string;
-  image: string;
-  alt: string;
-  flip?: boolean;
-}> = [
-  {
-    step: "01 · Chart",
-    title: "Read the candle, not the noise.",
-    body: "MT5 candles on a calm dark canvas — Auto-Fib, BOS/CHoCH structure, order blocks and FVGs that extend until mitigated. Lightweight Charts, with drawings (trendline, rectangle, text, horizontal). Volume, RSI, MACD, Stochastic and ADX sit in their own panes.",
-    href: "#hero-devices",
-    cta: "Open the chart",
-    image: "/landing/photos/809_1x_shots_so.png",
-    alt: "AXE Chart — BOS/LH/SFP structure",
-  },
-  {
-    step: "02 · Intel",
-    title: "See the board we actually watch.",
-    body: "Chokepoints, military radar, vessels and jets from free sources, plus SEC EDGAR and congressional STOCK Act trades. Dark-pool, options and tide tiles exist and say not configured until that paid source is bought.",
-    href: "#product",
-    cta: "Explore the feeds",
-    image: "/landing/photos/54_1x_shots_so.png",
-    alt: "AXE Intel Analysis",
-    flip: true,
-  },
-  {
-    step: "03 · Cockpit",
-    title: "It reads your fills.",
-    body: "A behavior map from MT5 fills on the ten-minute sync. Alignment is a Cockpit score for Core and above — example chrome on this page, live numbers in your own workspace. Daily and weekly briefings are part of that stack.",
-    href: "#cockpit",
-    cta: "See your Cockpit",
-    image: "/landing/photos/482_1x_shots_so.png",
-    alt: "AXE Cockpit — alignment",
-  },
-  {
-    step: "04 · AXE Chat",
-    title: "Your analyst, on the phone.",
-    body: "Ask AXE about your chart, your trades, your thesis. It reads the candle, the structure and the intel the app has. Streaming replies. You make every trading decision.",
-    href: "/chat",
-    cta: "Talk to AXE",
-    image: "/landing/photos/595_1x_shots_so.png",
-    alt: "AXE Chat — H1 Analysis",
-    flip: true,
-  },
-  {
-    step: "05 · Market Depth",
-    title: "See the order book.",
-    body: "Real L1 bid/ask from your broker plus a labelled synthetic ladder — spread, mid, uptick/downtick. Honest about what is real and what is estimated.",
-    href: "#hero-devices",
-    cta: "Open Depth",
-    image: "/landing/photos/446_1x_shots_so.png",
-    alt: "AXE Market Depth",
-  },
-  {
-    step: "06 · Global Chokepoints",
-    title: "Trade the supply chain.",
-    body: "Hormuz, Malacca, Suez, Panama, Bab-el-Mandeb, Taiwan Strait — ship counts and risk scoring as conflict reshapes logistics.",
-    href: "#product",
-    cta: "Track Chokepoints",
-    image: "/landing/photos/688_1x_shots_so.png",
-    alt: "AXE Global Chokepoints",
-    flip: true,
-  },
-  {
-    step: "07 · MT5 Connect",
-    title: "Your broker, your data.",
-    body: "Connect multiple MT5 accounts via MetaApi — Goat Funded Trader, FTMO, FundedNext, Upcomers or your own. Dashboard names such as Upcomers resolve to the real server (Upcomers-Server) before Connect. Fills sync about every ten minutes.",
-    href: "#mt5",
-    cta: "Connect MT5",
-    image: "/landing/photos/569_1x_shots_so.png",
-    alt: "AXE MT5 Connect",
-  },
-  {
-    step: "08 · Chart Tools",
-    title: "Every tool, one drawer.",
-    body: "Volume, MA, MACD, Bollinger, RSI, Stochastic, ADX, VWAP, POC, Fib, trendlines, rectangles, text, horizontal levels and S&D zones. Drag on, configure, toggle. No clutter, no hunting through menus.",
-    href: "#hero-devices",
-    cta: "Browse Tools",
-    image: "/landing/photos/423_1x_shots_so-2.png",
-    alt: "AXE Chart Tools",
-    flip: true,
-  },
-];
 
 export type LandingFeedIcon =
   | "tide"
@@ -213,124 +113,142 @@ export type LandingIntelFeed = {
   title: string;
   desc: string;
   icon: LandingFeedIcon;
-  /** Wide tiles in public/landing/index.html (span2). */
+  /** Wide tiles. */
   span?: 2;
-  /** True when the tile exists in the app but the paid source is not bought. */
-  notConfigured?: boolean;
+  /** The public source the feed is filled from (checked in intel_sync_log). */
+  source: string;
 };
 
 /**
- * The 19 intel tiles from `public/landing/index.html`, kept in that order.
+ * The intel tiles, in the order the Intel screen shows them.
  *
- * Count matches this repo: 13 `IntelProviderStatus` ids in `intelClient.ts`
- * plus Macro, Calendar, News, Correlation, Conviction and Déjà Vu.
+ * Count: 13 `IntelProviderStatus` ids in `intelClient.ts` plus Macro,
+ * Calendar, News, Correlation, Conviction and Déjà Vu.
  *
- * The paid options/dark-pool vendor is never named here. Dark pool, options
- * flow and market tide exist as tiles and are marked notConfigured; the FAQ
- * is the only place that says we have not bought that source. Do not paste
- * sample tide or dark-pool notionals into copy.
+ * Sources from `intel_sync_log` (26 Nov 2026): darkPool finra_reg_sho_daily,
+ * unusualOptions + marketTide nasdaq_delayed, vesselTracking digitraffic,
+ * cyberThreats cisa_kev, corporateJets / militaryRadar / emergencyMonitor
+ * adsb_lol, conflictEvents eonet+usgs, insiderTrades sec_edgar,
+ * congressTrades alphavantage, energyFlows eia. Chokepoints are a static
+ * reference table in `intelClient.ts` — never call them live counts.
  */
 export const LANDING_INTEL_FEEDS: ReadonlyArray<LandingIntelFeed> = [
   {
     title: "AXE Intel Tide",
-    desc: "Net call vs put premium. This tile is in the app; it stays not configured until the paid source is bought.",
+    desc: "Net call versus put premium across the market, built from delayed option chains — a mood read, not a real-time tape.",
     icon: "tide",
     span: 2,
-    notConfigured: true,
+    source: "Nasdaq delayed options",
   },
   {
     title: "AXE Macro",
     desc: "Rates, inflation, growth and central-bank posture from FRED and the news chain, distilled into a regime read.",
     icon: "macro",
+    source: "FRED",
   },
   {
     title: "AXE Market Conviction",
-    desc: "A conviction read the intel desk can generate from the feeds we actually have — not a live paid tape.",
+    desc: "A conviction read AXE generates from the intel feeds on this page — analysis, not a signal service.",
     icon: "conviction",
+    source: "Built from the feeds here",
   },
   {
     title: "AXE Insider Flow",
-    desc: "Form-4 buys and sells the moment they hit, sized in dollars, ranked by signal. SEC EDGAR, no paid tape.",
+    desc: "Form 4 insider buys and sells as they are filed, sized in dollars.",
     icon: "insider",
+    source: "SEC EDGAR",
   },
   {
     title: "AXE Policy Flow",
-    desc: "Congressional STOCK Act trades — House and Senate — from Alpha Vantage, not a paid tape.",
+    desc: "Congressional trade disclosures under the STOCK Act — House and Senate.",
     icon: "policy",
+    source: "Alpha Vantage",
   },
   {
     title: "AXE Dark Pool",
-    desc: "Off-exchange block prints. This tile is in the app; it stays not configured until the paid source is bought.",
+    desc: "Daily off-exchange volume per ticker from FINRA's published files — a day-level read, not individual prints.",
     icon: "darkpool",
-    notConfigured: true,
+    source: "FINRA daily files",
   },
   {
     title: "AXE Options Flow",
-    desc: "Sweeps, blocks and unusual contracts. This tile is in the app; it stays not configured until the paid source is bought.",
+    desc: "Unusual contracts by volume and open interest, from delayed option chains.",
     icon: "options",
-    notConfigured: true,
+    source: "Nasdaq delayed options",
   },
   {
     title: "AXE Jet Tracker",
-    desc: "Corporate jets. Who is airborne, who is grounded — Dell, Alphabet, Pfizer, ExxonMobil and the rest of the tracked fleet.",
+    desc: "Corporate jets on a tracked list — who is airborne and where, when the open feed has them in view.",
     icon: "jets",
+    source: "adsb.lol",
   },
   {
     title: "AXE Military Radar",
-    desc: "Aircraft tracked across bombers, ISR and tankers — flight level and speed when the feed has a fresh row.",
+    desc: "Military aircraft in view of the open feed — type, flight level and speed.",
     icon: "radar",
+    source: "adsb.lol",
   },
   {
     title: "AXE Emergency Monitor",
-    desc: "Distress feed across global airspace. Active alerts surface the moment a row exists.",
+    desc: "Aircraft squawking an emergency code, as the open feed reports them.",
     icon: "emergency",
+    source: "adsb.lol",
   },
   {
     title: "AXE Vessel Intel",
-    desc: "Tracked tankers and container ships positioned against live chokepoint risk.",
+    desc: "Ship positions from an open AIS feed. Coverage is regional, not every ocean.",
     icon: "vessel",
+    source: "Digitraffic AIS",
   },
   {
     title: "AXE Energy Flow",
-    desc: "Crude, gas and power series the energy desk can read — cargoes, storage and pipeline shifts.",
+    desc: "Crude, gas and power series — storage, production and stocks.",
     icon: "energy",
+    source: "EIA",
   },
   {
     title: "AXE Global Chokepoints",
-    desc: "Hormuz, Malacca, Suez, Panama, Bab-el-Mandeb, Taiwan Strait — ship counts and risk scoring as conflict reshapes supply chains.",
+    desc: "Hormuz, Malacca, Suez, Panama, Bab-el-Mandeb and the Taiwan Strait — a reference table of typical daily transits, share of world trade and risk level. Reference figures, not a live ship count.",
     icon: "chokepoints",
     span: 2,
+    source: "Reference table",
   },
   {
     title: "AXE Seismic Events",
-    desc: "Earthquakes, volcanoes, wildfires and conflict events tagged with market impact — supply shocks before the wire catches up.",
+    desc: "Earthquakes, volcanoes, wildfires and storms — natural events that can move supply.",
     icon: "seismic",
+    source: "USGS and NASA EONET",
   },
   {
     title: "AXE Cyber Intel",
-    desc: "Breaches, ransomware and outages mapped to tickers — the digital risk feed equities now trade on.",
+    desc: "Software vulnerabilities that are being exploited right now, with the vendor named.",
     icon: "cyber",
+    source: "CISA KEV",
   },
   {
     title: "AXE Correlation Engine",
-    desc: "Cross-asset correlations computed in-app — how gold, yields, crude and crypto are moving together, including Déjà Vu similar-pattern rows.",
+    desc: "Cross-asset correlations computed in the app — how gold, yields, crude and crypto move together, with Déjà Vu similar-pattern rows.",
     icon: "correlation",
     span: 2,
+    source: "Computed in-app",
   },
   {
     title: "AXE News",
-    desc: "Multi-source headlines fused and de-duped — cached so a quiet hour never burns your feed.",
+    desc: "Headlines from several providers, de-duplicated and cached for five minutes per symbol.",
     icon: "news",
+    source: "Polygon, Perigon, Finnhub, EODHD",
   },
   {
     title: "AXE Calendar",
-    desc: "Upcoming events, prints and earnings on one timeline — know what hits the tape before it does.",
+    desc: "Upcoming economic releases on one timeline, with their expected impact.",
     icon: "calendar",
+    source: "Finnhub",
   },
   {
     title: "AXE Déjà Vu",
-    desc: "Similar-pattern rows inside the correlation engine — historical analogues to today's setup, when that engine has data.",
+    desc: "Historical analogues to today's setup, inside the correlation engine — when that engine has data for the pair.",
     icon: "dejavu",
+    source: "Computed in-app",
   },
 ];
 
@@ -350,7 +268,7 @@ export type LandingFeatureIcon =
   | "accounts"
   | "wallets";
 
-/** Companion-only tiles. Trading OS capabilities belong in LANDING_TOS_BRIDGE. */
+/** Companion-only tiles. Trading OS capabilities belong in LANDING_ECOSYSTEM.desk. */
 export const COMPANION_FEATURES: ReadonlyArray<{
   title: string;
   desc: string;
@@ -358,150 +276,111 @@ export const COMPANION_FEATURES: ReadonlyArray<{
 }> = [
   {
     title: "Chart, indicators and drawings",
-    desc: "Candles, Auto-Fib (Auto / Swing / Day), Auto-Trend, swing points, BOS/CHoCH, Volume, MA, MACD, Bollinger, RSI, Stochastic, ADX, VWAP, POC — plus trendline, rectangle, text and horizontal drawings.",
+    desc: "Candles with Auto-Fib, Auto-Trend, swing points and BOS/CHoCH structure. Volume, MA, MACD, Bollinger, RSI, Stochastic, ADX, VWAP and POC. Trendline, rectangle, text and horizontal-level drawings.",
     icon: "chart",
   },
   {
-    title: "Order blocks and fair value gaps, drawn forward",
-    desc: "Volumetric order blocks, fair-value gaps and inverse FVGs that keep extending until they are mitigated. Pick 1, 2 or 3 per side.",
+    title: "Order blocks and fair value gaps",
+    desc: "Order blocks and fair value gaps (including inverse gaps) that keep extending until price mitigates them. Show 1, 2 or 3 per side.",
     icon: "chart",
   },
   {
-    title: "Market depth drawer",
-    desc: "Slide out depth from the top bar. Real L1 bid/ask from your broker plus a labelled synthetic ladder — spread, mid, uptick / downtick.",
+    title: "Bid/ask and depth drawer",
+    desc: "Slide out depth from the top bar: the live bid/ask from your broker, plus a ladder around it that is labelled as synthetic — calculated, not a real order book.",
     icon: "depth",
   },
   {
     title: "News, intel and AXE Feed",
-    desc: "Polygon, Perigon, Finnhub, EODHD and FRED, cached for 5 minutes. Intel adds SEC EDGAR, congressional STOCK Act trades, GDELT, flight and vessel tracking. The AXE Feed carries morning briefs, daily news and the market recap.",
+    desc: "Headlines from Polygon, Perigon, Finnhub and EODHD, cached for five minutes, plus FRED macro. The intel screen adds the feeds listed further down. The AXE Feed carries morning briefs, daily news and the market recap.",
     icon: "news",
   },
   {
     title: "One-tap execution dock",
-    desc: "Market, buy / sell limit, SL, TP, deviation — locked to the chart. Live orders need the connected broker, Live Trading on, and a confirm banner.",
+    desc: "Market and limit orders with SL, TP and deviation, tied to the chart. Live orders need a connected broker, Live Trading switched on and a confirm banner.",
     icon: "execute",
   },
   {
-    title: "AXE chat with your book pinned",
-    desc: "Chat that reads your chart, accounts, journal, news and intel. Technical analysis and educational context — you make every trading decision.",
+    title: "AXE, your assistant",
+    desc: "AXE reads your chart, accounts, journal, news and intel when it answers. Technical analysis and educational context — you make every trading decision.",
     icon: "chat",
   },
   {
     title: "Journal from your fills",
-    desc: "Trades land from the broker on the ten-minute sync. You tap an outcome, attach a voice note, a photo or a chart snapshot. Core also runs AXE auto-journal labels on closed trades. Win rate and calendar come from those rows.",
+    desc: "Trades arrive from the broker on the ten-minute sync. Tap an outcome, add a voice note, a photo or a chart snapshot. On Core and up, AXE labels closed trades for you.",
     icon: "journal",
   },
   {
     title: "Price alerts, push and drawdown",
-    desc: "In-app price alerts on the chart, plus web-push delivery. The background watcher fires those alerts, live per-firm drawdown bands from last-known equity, and the trailing-stop sweep.",
+    desc: "Price alerts on the chart with push delivery to your phone. The background watcher fires those alerts, the per-firm drawdown alerts from last-known equity, and the trailing-stop sweep.",
     icon: "push",
   },
   {
-    title: "MT5 via MetaApi",
-    desc: "Multiple cloud MT5 accounts from Accounts. Known brokers include FTMO, Goat Funded Trader, FundedNext and Upcomers. Dashboard names such as Upcomers resolve to the real server before Connect. Positions and fills sync about every ten minutes. Alpaca paper/live is available when configured. Advanced: a hashed per-account link token in your EA / bridge.",
+    title: "MT5 via MetaApi, and Alpaca",
+    desc: "Connect MT5 accounts from Accounts. Known brokers include FTMO, Goat Funded Trader, FundedNext and Upcomers; a dashboard name such as Upcomers resolves to the real server before connecting. Positions and fills sync about every ten minutes. Alpaca paper and live are supported.",
     icon: "mt5",
   },
   {
-    title: "Firm rules and autonomy guard",
-    desc: "Per-firm rule presets from the MT5 server name (FTMO 2-Step / 1-Step / Instant, Upcomers Oracle, others by name). AXE autonomy has three levels; unattended orders need your limits and a daily-trade cap. It blocks and names the rule. It never quietly shrinks the trade. Drawdown and daily-loss alerts fire from live equity.",
+    title: "Firm rules and an autonomy guard",
+    desc: "Rule presets for prop firms (FTMO 2-Step, 1-Step and Instant, Upcomers Oracle and others). AXE autonomy has three levels. Before any automatic order it checks your limits and blocks with the rule named — it never quietly shrinks the trade.",
     icon: "risk",
   },
   {
-    title: "Learning Arc and Cockpit",
-    desc: "Core and above: Cockpit, Learning Arc, trade prep, chart actions, daily and weekly briefings. Alignment is a Cockpit score from your own workspace, not a generic FIT gauge.",
+    title: "Cockpit and Learning Arc",
+    desc: "On Core and up: Cockpit, Learning Arc, trade preparation, chart actions and daily and weekly briefings, built from your own trades and journal.",
     icon: "arc",
   },
   {
-    title: "Multi-account, private workspaces",
-    desc: "Funded, demo, live — one active account at a time, analytics scoped per account. Each workspace stays private to your login. Optional crypto wallets live under the same login. Install as a PWA from the browser; no App Store required.",
+    title: "Several accounts, one private workspace",
+    desc: "Funded, demo and live accounts side by side, one active at a time, with stats per account. Your workspace is private to your login.",
     icon: "accounts",
   },
 ];
 
-export const LANDING_TOS_BRIDGE = {
-  kicker: "with Trading OS",
-  title: "The desk Companion plugs into.",
-  body:
-    "These belong to Trading OS, the desktop terminal — not to the phone OS. Same login, same account, same subscription, when the desk is what you need.",
-  features: [
-    "Multi-chart layouts and a command palette",
-    "QuantLab, Intel Center, News and Macro terminals",
-    "Sector heatmap, market scanner, session banners",
-    "Sentiment suite on the desk",
-  ],
-} as const;
-
 export const LANDING_FAQ: ReadonlyArray<{ q: string; a: string }> = [
   {
+    q: "What is the difference between AXE Companion and Trading OS?",
+    a: "AXE Companion is the phone app. Trading OS is the desktop terminal. They share one login, one set of broker accounts and one database, and AXE is the assistant in both — so what you do on one is there on the other. Companion works on its own; you do not need the desktop to use it. The switcher in the top-left corner moves you between them.",
+  },
+  {
+    q: "Which plan do I need for the phone app?",
+    a: "Core or higher. Free gives you Trading OS on the desk (in beta) with capped AXE chat; AXE Companion on your phone starts at Core. One subscription covers both apps.",
+  },
+  {
     q: "Does AXE place trades?",
-    a: "Yes — through the connected broker, with safety checks. New accounts get a free virtual demo on live prices. Live execution stays off until you turn it on: it needs the linked account and a one-time disclaimer, and only then does the BUY / SELL dock send real orders (market, buy / sell limit, SL, TP, deviation). Automatic orders only fire from an alert you armed, and only after the five account checks below, inside the autonomy level you set.",
+    a: "Yes — through the connected broker, with safety checks. Live execution stays off until you turn it on: it needs the linked account and a one-time disclaimer, and only then does the BUY / SELL dock send real orders (market, buy / sell limit, SL, TP, deviation). Automatic orders only fire from an alert you armed, after the account checks below, inside the autonomy level you set.",
   },
   {
     q: "Can AXE place a trade without me pressing anything?",
-    a: "Only if you set autonomy to place-within-limits, build an alert that says so, and stay inside limits you set. Before any automatic order AXE checks the account: is this a news window the account forbids, is it the weekend, is the lot above your cap, has the daily loss limit already been hit, have we already fired the day's maximum of automatic trades. If any of those is true it blocks the order and names the rule that stopped it. It will not quietly place a smaller trade instead. Prop and evaluation accounts keep their own rule presets — those win over anything AXE would otherwise do. Live per-firm drawdown alerts fire from last-known equity.",
+    a: "Only if you set autonomy to place-within-limits, build an alert that says so, and stay inside limits you set. Before any automatic order AXE checks the account: is this a news window the account forbids, is it the weekend, is the lot above your cap, is the risk per trade above your limit, has the daily loss limit or the total loss limit been hit, have we already fired the day's maximum of automatic trades. If any of those is true it blocks the order and names the rule that stopped it. It will not quietly place a smaller trade instead. Prop accounts keep their own rule presets, and those win over anything AXE would otherwise do.",
   },
   {
     q: "Does Companion have News?",
-    a: "Yes. Companion ships a News surface and a cached multi-source feed (Polygon → Perigon → Finnhub → EODHD, plus FRED macro). Chat can pull that same context. The AXE Feed adds morning briefs, daily news and a market recap. You do not need Trading OS, and you do not need a separate News tab in the desktop terminal, to read headlines in Companion.",
-  },
-  {
-    q: "Do I need a News tab in AXE Companion to get market or news context in chat?",
-    a: "No. The News surface is there when you want the feed, but AXE chat can already read the cached headlines and intel for the pair you have open. Companion has News — it is not a Trading OS-only panel.",
+    a: "Yes. Companion has a News screen and a cached multi-source feed (Polygon → Perigon → Finnhub → EODHD, plus FRED macro). AXE can read that same context in chat. The AXE Feed adds morning briefs, daily news and a market recap.",
   },
   {
     q: "Which market intelligence is actually live?",
-    a: "Charting, depth, and the news chain (Polygon → Perigon → Finnhub → EODHD, plus FRED macro) are live, and so is every intel feed, from free sources: SEC EDGAR insider filings, congressional STOCK Act disclosures from Alpha Vantage (House and Senate), dark-pool prints from FINRA's daily off-exchange volume, options flow and market tide from Nasdaq's delayed option chains, GDELT event data, flight and vessel tracking. None of these need a paid Unusual Whales subscription, which we have not bought. When one source is down, only its panel says so, with the reason, and shows its last good rows marked cached.",
+    a: "Charting, depth and the news chain are live, and so is every intel feed, from free and public sources: SEC EDGAR insider filings, congressional trade disclosures from Alpha Vantage, dark-pool volume from FINRA's daily off-exchange files, options flow and market tide from Nasdaq's delayed option chains, aircraft from adsb.lol, vessels from an open AIS feed, natural events from USGS and NASA, exploited vulnerabilities from CISA and energy data from the EIA. None of these need a paid Unusual Whales subscription, which we have not bought. When a source is down, only its panel says so and shows its last good rows marked cached.",
   },
   {
     q: "How does MT5 connect?",
-    a: "Recommended path: in-app cloud MT5 from Accounts after you sign in, via MetaApi. Type the server the way your firm shows it — Upcomers resolves to Upcomers-Server when MetaApi knows that name. Positions, equity and fills sync about every ten minutes, not on every tick. Advanced: create a per-account link token and paste it into your MT5 Expert Advisor or bridge. Only a hash of the token is stored; you can revoke it any time.",
+    a: "From Accounts after you sign in, through MetaApi's cloud. Type the server the way your firm shows it — Upcomers resolves to Upcomers-Server. Positions, equity and fills sync about every ten minutes, not on every tick. Advanced: create a per-account link token and paste it into your MT5 Expert Advisor or bridge. Only a hash of the token is stored, and you can revoke it any time.",
   },
   {
-    q: "Where do I paste the MT5 link token?",
-    a: "Not inside this app. Put it in your MT5 Expert Advisor or bridge. After the first successful post, trades, equity and stats flow on the same ten-minute sync — see Accounts right after you create a token.",
-  },
-  {
-    q: "Do push notifications, auto-journal labels, AXE memory or the watcher work?",
-    a: "Yes. Price alerts evaluate in the app. Push notification delivery is live. Core auto-journals closed trades. AXE memory, journal, rules and chat context persist across sessions on paid plans. The background watcher fires price, drawdown and trailing-stop alerts. Daily and weekly briefings, the AXE Feed, Cockpit and Learning Arc (Core) run on that same stack.",
+    q: "Do push notifications, auto-journal, AXE memory and the watcher work?",
+    a: "Yes. Push notification delivery is live on Core and up. Core auto-journals closed trades. On Pro and up AXE remembers your journal, rules and chat context across sessions. The background watcher fires price, drawdown and trailing-stop alerts.",
   },
   {
     q: "Is my data private?",
-    a: "Your workspace stays private to your login. Broker rows, journal attachments, chat and waitlist writes do not leak across accounts. The waitlist stores only the address, the surface and the source — no IP, no user-agent.",
-  },
-  {
-    q: "What is Trading OS, and how does it relate to AXE?",
-    a: "AXE Companion is the phone-first OS — chart, depth, news, intel, alerts, journal, accounts and AXE all work standalone. Trading OS is the desktop terminal on the same login, currently in private beta: multi-chart layouts, QuantLab, Intel Center, macro terminal. One account across both. The switcher in the top-left corner moves you between them.",
-  },
-  {
-    q: "Do I need Trading OS on desktop?",
-    a: "No. Chart, depth, news, intel, alerts, journal, accounts and AXE all work standalone in the phone OS — Companion is not a companion to anything, it is the product. Trading OS is the desktop terminal on the same login, currently in private beta: multi-chart layouts, QuantLab, Intel Center, macro terminal. One account across both. The switcher in the top-left corner moves you between them.",
-  },
-  {
-    q: "How does news caching keep my provider bills sane?",
-    a: "Every news call is keyed by symbol + provider and cached for 5 minutes. Polygon is tried first (paid feed, deepest coverage), then Perigon → Finnhub → EODHD. A quiet hour costs you a single round of cached calls instead of N×providers per page-view.",
+    a: "Your workspace is private to your login. Broker rows, journal attachments and chat are not shared across accounts. The waitlist stores only the address, the surface and the source — no IP, no user-agent.",
   },
   {
     q: "Is this an App Store app?",
-    a: "Install the site as a PWA on your home screen (Safari / Chrome) — no App Store required for the core flow. The hero shows a no-login walkthrough of the current screens.",
+    a: "No. Open axecompanion.com on your phone and add it to your home screen from Safari or Chrome; it then opens like an app. No App Store needed.",
   },
 ];
 
 export const LANDING_FINAL_CTA = {
   titleLead: "One account.",
-  titleAccent: "One trading brain.",
-  body: "Start free on the Trading OS desk. Core unlocks AXE Companion on your phone — same login, one subscription.",
+  titleAccent: "Phone and desk.",
+  body: "Create your account, then pick a plan in the app. AXE Companion on your phone starts at Core; Trading OS on the desk (in beta) is included.",
 } as const;
-
-/** Off by default. Flip NEXT_PUBLIC_LANDING_TESTIMONIALS=1 when real, reviewed quotes exist. */
-export function landingTestimonialsEnabled(
-  env: Record<string, string | undefined> = process.env,
-): boolean {
-  return (env.NEXT_PUBLIC_LANDING_TESTIMONIALS ?? "").trim() === "1";
-}
-
-/** Published quotes only. Empty until a real, reviewed submission is approved. */
-export const LANDING_TESTIMONIALS: ReadonlyArray<{
-  name: string;
-  role: string;
-  quote: string;
-}> = [];

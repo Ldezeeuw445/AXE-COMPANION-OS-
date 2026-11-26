@@ -2520,10 +2520,9 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
    the `/final` React hero. Namespaced `axe-hero-*` so nothing here collides
    with the draft's own inline styles, which are still served statically.
 
-   The screens run `/hero-demo/app.html`, a self-contained mock: no account,
-   no Supabase, no network. The devices used to iframe `/demo/embed`, which
-   minted an anonymous session — and anonymous accounts are gone, so a visitor
-   who was not signed in saw a sign-in form inside the phone instead of an app.
+   The screens hold real captures of the live site (public/landing/real/),
+   dated. The earlier no-login mock (/hero-demo) showed made-up numbers and is
+   gone: no mock or demo data on the landing page.
    ─────────────────────────────────────────────────────────────────────────── */
 
 .axe-hero-stage {
@@ -2752,6 +2751,30 @@ body.axe-embed-demo.axe-embed-phone .tos-shell-mobile-nav {
 
   .axe-hero-device--phone {
     width: min(360px, 88vw);
+  }
+}
+
+/* Two real captures side by side. The stage is column-reverse below 1100px
+   for the old iPad layout; captures stay in a row and the second phone drops
+   out below 640px so one phone is shown full width on a real phone. */
+.axe-hero-stage--captures,
+.axe-hero-stage.axe-hero-stage--captures {
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.axe-hero-stage--captures .axe-hero-device--phone {
+  width: min(300px, 40vw);
+  margin: 0;
+}
+
+@media (max-width: 639px) {
+  .axe-hero-stage--captures .axe-hero-device--second {
+    display: none;
+  }
+
+  .axe-hero-stage--captures .axe-hero-device--phone {
+    width: min(320px, 78vw);
   }
 }
 
