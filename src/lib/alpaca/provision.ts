@@ -73,11 +73,21 @@ export async function ensureAlpacaPaperAccount(
     provisioned_at: now,
   };
 
+  const previousMeta =
+    existing?.metadata && typeof existing.metadata === "object" && !Array.isArray(existing.metadata)
+      ? (existing.metadata as Record<string, unknown>)
+      : {};
+
   // Every column below is server-set (connected status, the Alpaca account
   // summary), so both writes go out elevated and the trader's own grants are
   // not what provisions the row (TOS-SEC-2). Ownership: the update targets the
   // row the RLS-scoped lookup above returned and filters user_id; the insert
   // has no row to read, so the session must be this user.
+  //
+  // Metadata is a shared jsonb blob: trading rules, account size, and Trading
+  // OS keys (`tosProgramId` / `tosAssignment` / `tosMaxRiskPerTradePercent`)
+  // live on the same row. Replacing the object with only Alpaca-owned keys
+  // would wipe them on every accounts-page load / provision refresh.
   if (existing?.id) {
     await syncWriteClient(supabase)
       .from("user_broker_accounts")
@@ -88,7 +98,7 @@ export async function ensureAlpacaPaperAccount(
         trading_mode: "paper",
         hub_status: "connected",
         last_sync_at: now,
-        metadata,
+        metadata: { ...previousMeta, ...metadata },
       })
       .eq("id", existing.id)
       .eq("user_id", userId);
