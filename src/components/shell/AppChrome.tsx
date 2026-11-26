@@ -32,6 +32,10 @@ export function AppChrome({ children }: { children: ReactNode }) {
   const viewport = useShellViewport();
   const isChart = pathname === "/chart" || pathname.startsWith("/chart/");
   const isChat = pathname === "/chat" || pathname.startsWith("/chat/");
+  const isHome =
+    pathname === "/cockpit" ||
+    pathname.startsWith("/cockpit/") ||
+    pathname.startsWith("/marketing/home-probe");
   const tab = tabFromPathname(pathname) ?? session.lastTab;
 
   return (
@@ -49,9 +53,9 @@ export function AppChrome({ children }: { children: ReactNode }) {
             data-shell-tf={session.timeframe}
             data-shell-account-type={session.accountType}
             data-shell-account-id={session.accountId ?? ""}
-            className={`relative mx-auto flex min-h-dvh w-full max-w-6xl flex-col [touch-action:pan-y] tos-shell-desktop-layout ${
-              isChart ? "tos-route-chart" : ""
-            } ${isChat ? "tos-route-chat" : ""} ${
+            className={`relative mx-auto flex min-h-dvh w-full flex-col [touch-action:pan-y] tos-shell-desktop-layout ${
+              isHome ? "tos-route-home max-w-[90rem]" : "max-w-6xl"
+            } ${isChart ? "tos-route-chart" : ""} ${isChat ? "tos-route-chat" : ""} ${
               viewport === "tablet" ? "tos-tablet-device" : ""
             } ${viewport === "desktop" ? "tos-shell-mouse-desktop" : ""}`}
           >
