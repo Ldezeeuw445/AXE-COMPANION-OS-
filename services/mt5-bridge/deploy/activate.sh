@@ -16,7 +16,8 @@ set -euo pipefail
 BRIDGE_HOST="${1:?bridge box IP or host}"
 BRIDGE_URL="${2:?public bridge URL, e.g. https://mt5-bridge.example.com}"
 BRIDGE_URL="${BRIDGE_URL%/}"
-COMPANION_HOST="${COMPANION_HOST:-212.227.91.79}"
+# The ~/.ssh/config alias for 212.227.91.79 (it carries the right key and user).
+COMPANION_HOST="${COMPANION_HOST:-api.axecompanion.com}"
 SUPABASE_REF="${SUPABASE_REF:-pqnngpcgbdwxavbatbia}"
 KEY="${BRIDGE_SSH_KEY:-$HOME/.ssh/mt5_bridge}"
 # user_broker_accounts.id of the Upcomers account. Reconnecting it in Companion on
@@ -42,7 +43,7 @@ printf '%s' "$HEALTH" | grep -q '"ok": *true' || { echo "terminal not connected 
 say "Companion env on $COMPANION_HOST"
 # Values go over stdin; the remote side rewrites only these three lines, with a backup.
 printf 'MT5_BRIDGE_URL=%s\nMT5_BRIDGE_TOKEN=%s\nMT5_BRIDGE_ACCOUNT_ID=%s\n' "$BRIDGE_URL" "$TOKEN" "$ACCOUNT" |
-  ssh -o BatchMode=yes "root@$COMPANION_HOST" 'set -e
+  ssh -o BatchMode=yes "$COMPANION_HOST" 'set -e
     F=/root/AXE-COMPANION-OS-/.env.local
     cp -p "$F" "$F.bak-$(date +%Y%m%d-%H%M%S)"
     python3 -c "
