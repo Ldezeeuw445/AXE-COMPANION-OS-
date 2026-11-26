@@ -89,11 +89,22 @@ class Terminal:
             except NotConnected as e:
                 return {"connected": False, "reason": str(e)}
             account = self.mt5.account_info()
+            info = self.mt5.terminal_info()
             return {
                 "connected": True,
                 "login": getattr(account, "login", None),
                 "server": getattr(account, "server", None),
+                # The account flag only: whether this login may trade at all.
                 "tradeAllowed": bool(getattr(account, "trade_allowed", False)),
+                # What MT5 itself checks before it takes an order from the bridge
+                # (25 Nov 2026: tradeAllowed read true while every order came back
+                # 10027 "AutoTrading disabled by client"):
+                # the Algo Trading button,
+                "algoTrading": bool(getattr(info, "trade_allowed", False)),
+                # Options → Expert Advisors → "Disable algorithmic trading via external Python API",
+                "pythonTradingDisabled": bool(getattr(info, "tradeapi_disabled", False)),
+                # and whether the broker lets this account trade from a program at all.
+                "brokerAllowsAlgo": bool(getattr(account, "trade_expert", False)),
                 "brokerUtcOffsetHours": self.offset_seconds() / 3600,
             }
 

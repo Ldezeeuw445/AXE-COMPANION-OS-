@@ -128,9 +128,12 @@ as_mt5 wine "$PY_EXE" -m pip install --disable-pip-version-check -q -r 'Z:\opt\m
 as_mt5 wine "$PY_EXE" -c "import numpy, MetaTrader5, fastapi, uvicorn; print('bridge packages import:', 'numpy', numpy.__version__, 'MetaTrader5', MetaTrader5.__version__)" 2>&1 | cat
 
 say "terminal and bridge services"
-install -m 0644 "$APP/deploy/mt5-terminal.service" "$APP/deploy/mt5-bridge.service" /etc/systemd/system/
+install -m 0644 "$APP/deploy/mt5-terminal.service" "$APP/deploy/mt5-bridge.service" \
+  "$APP/deploy/mt5-bridge-watchdog.service" "$APP/deploy/mt5-bridge-watchdog.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now mt5-terminal mt5-bridge >/dev/null
+# Restarts the bridge when it stops answering (deploy/watchdog.sh).
+systemctl enable --now mt5-bridge-watchdog.timer >/dev/null
 
 say "check"
 for _ in $(seq 1 30); do

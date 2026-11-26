@@ -50,6 +50,7 @@ class FakeTerminal:
     def __init__(self) -> None:
         self.sent = []
         self.connected = True
+        self.algo_trading = True
         self.positions = [
             NS(ticket=501, type=POSITION_TYPE_BUY, symbol="XAUUSD", magic=0,
                time=BROKER_NOW - 600, time_msc=0, time_update=BROKER_NOW - 60, time_update_msc=0,
@@ -73,13 +74,13 @@ class FakeTerminal:
         return (1, "Success")
 
     def terminal_info(self):
-        return NS(connected=self.connected)
+        return NS(connected=self.connected, trade_allowed=self.algo_trading, tradeapi_disabled=False)
 
     def account_info(self):
         return NS(login=12347717, trade_mode=ACCOUNT_TRADE_MODE_DEMO, leverage=100, balance=100000.0,
                   credit=0.0, profit=52.0, equity=100052.0, margin=265.0, margin_free=99787.0,
                   margin_level=37755.47, currency="USD", server="Upcomers-Server", company="Upcomers",
-                  name="Luka", trade_allowed=True)
+                  name="Luka", trade_allowed=True, trade_expert=True)
 
     def symbol_select(self, symbol, enable):
         return True

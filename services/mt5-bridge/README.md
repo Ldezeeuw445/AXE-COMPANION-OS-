@@ -108,6 +108,35 @@ What it does, by hand:
    next to the MT5 app, then one 0.01-lot **demo** order with Luka's yes, and
    only then `MT5_BRIDGE_TRADING=on` for the real account.
 
+## Updating, and the watchdog
+
+After the first install, update with `deploy/update.sh`, not `install.sh`:
+
+```bash
+rsync -a -e "ssh -i ~/.ssh/mt5_bridge" services/mt5-bridge/ root@HOST:/opt/mt5-bridge/
+ssh -i ~/.ssh/mt5_bridge root@HOST 'bash /opt/mt5-bridge/deploy/update.sh'
+```
+
+It prints what happened in the last 12 hours (services, out-of-memory kills,
+bridge and terminal log), installs the unit files and the watchdog, and
+restarts **only the bridge**. `install.sh` stops the terminal to update Wine,
+and a restarted terminal can come back with the Algo Trading button off.
+
+`mt5-bridge-watchdog.timer` runs `deploy/watchdog.sh` every minute:
+- no answer on `/health` twice in a row → restart the bridge;
+- answering, but the terminal not connected to the broker for 15 minutes →
+  restart the terminal, at most once an hour.
+
+Why: on 26 Nov 2026 the bridge stopped answering at about 06:20 UTC and stayed
+down for hours. The process hung instead of exiting, so `Restart=always`
+never fired. See what it did with `journalctl -u mt5-bridge-watchdog`.
+
+`/status` says whether MT5 will take an order from the bridge, not only
+whether the account may trade: `algoTrading` (the Algo Trading button),
+`pythonTradingDisabled` (Options → Expert Advisors → "Disable algorithmic
+trading via external Python API") and `brokerAllowsAlgo`. An order that comes
+back 10027 "AutoTrading disabled by client" means one of those is off.
+
 ## Tests
 
 On any machine, no MT5 needed (a fake `MetaTrader5` module with the real
