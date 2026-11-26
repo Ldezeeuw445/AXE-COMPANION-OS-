@@ -235,3 +235,16 @@ def test_offset_detection_rounds_to_half_hours():
 def test_name_for_prefers_the_canonical_name(mt5):
     assert mapping.name_for(mt5, "ORDER_TYPE_", 0) == "ORDER_TYPE_BUY"
     assert mapping.name_for(mt5, "TRADE_RETCODE_", 10009) == "TRADE_RETCODE_DONE"
+
+
+# ── what MT5 itself checks before it takes an order ─────────────────────────
+
+def test_status_says_whether_mt5_will_take_orders_from_the_bridge(client, mt5):
+    j = client.get("/status", headers=H).json()
+    assert j["connected"] is True
+    assert (j["tradeAllowed"], j["algoTrading"], j["pythonTradingDisabled"], j["brokerAllowsAlgo"]) == (True, True, False, True)
+    # 25 Nov 2026: the account could trade while the Algo Trading button was off,
+    # and every order came back 10027. The status now says so.
+    mt5.state.algo_trading = False
+    j = client.get("/status", headers=H).json()
+    assert j["tradeAllowed"] is True and j["algoTrading"] is False

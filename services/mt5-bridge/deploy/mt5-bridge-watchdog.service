@@ -1,0 +1,9 @@
+# One check of the MT5 bridge; see deploy/watchdog.sh. Started every minute by
+# mt5-bridge-watchdog.timer. /etc/systemd/system/mt5-bridge-watchdog.service
+[Unit]
+Description=MT5 bridge watchdog (restart it when it stops answering)
+After=mt5-bridge.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/mt5-bridge/deploy/watchdog.sh
