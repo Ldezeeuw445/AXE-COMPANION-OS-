@@ -274,6 +274,23 @@ describe("SupabaseDatabaseAdapter is owner-scoped without RLS", () => {
     assert.equal(theirs?.hub_status, "connected", "the other trader's row was modified");
   });
 
+  it("saveAccount reads ownership before the elevated write, and stops for a foreign id", async () => {
+    const { adapter, fake } = setup();
+    const mine = await adapter.getAccount("acct-own");
+    assert.ok(mine);
+    fake.statements.length = 0;
+
+    await adapter.saveAccount({ ...mine, status: "disconnected" });
+    assert.deepEqual(fake.statements.map((s) => s.op), ["select", "update"]);
+
+    fake.statements.length = 0;
+    await assert.rejects(
+      () => adapter.saveAccount({ ...mine, id: "acct-other", status: "disconnected" }),
+      /not found for this user/,
+    );
+    assert.deepEqual(fake.statements.map((s) => s.op), ["select"]);
+  });
+
   it("deleteAccount removes the owner's row", async () => {
     const { adapter, state } = setup();
     await adapter.deleteAccount("acct-own");
