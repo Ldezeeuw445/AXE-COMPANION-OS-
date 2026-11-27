@@ -1,4 +1,5 @@
-import { CockpitAlignment } from "@/components/cockpit/CockpitAlignment";
+import { CockpitLearningModel } from "@/components/cockpit/CockpitLearningModel";
+import { getLearningModel, type LearningModelView } from "@/services/learningModelService";
 import { CockpitBehaviorMap } from "@/components/cockpit/CockpitBehaviorMap";
 import { CockpitConfidenceChart } from "@/components/cockpit/CockpitConfidenceChart";
 import { CockpitFeedbackImpact } from "@/components/cockpit/CockpitFeedbackImpact";
@@ -49,6 +50,7 @@ export default async function CockpitPage() {
   let userId: string | undefined;
   let adaptiveSuggestions: AdaptiveSuggestionState[] = [];
   let knowledge: UserKnowledgeOverview = { files: [], sharedDocCount: 0 };
+  let learning: LearningModelView | null = null;
   if (supabase) {
     const {
       data: { user },
@@ -61,6 +63,8 @@ export default async function CockpitPage() {
         getUserKnowledgeOverview(supabase, user.id),
       ]);
       entitlement = nextEntitlement;
+      // Learning model v2 — the honest score, across all accounts.
+      learning = await getLearningModel(supabase, user.id).catch(() => null);
       knowledge = knowledgeOverview;
       adaptiveSuggestions = suggestionRows
         .filter((row) => row.status === "pending")
@@ -81,9 +85,7 @@ export default async function CockpitPage() {
   const hasSnapshot = Boolean(dash.snapshotId);
   const cockpitCalibrated = hasSnapshot && dash.calibration.state === "active";
   const cockpitPreview = hasSnapshot && dash.calibration.state !== "active";
-  const alignmentDelta = dash.alignment.deltaFromPrior;
-  const showRecalibrationCue = hasSnapshot && dash.calibration.lastCalculatedAt != null;
-  const significantShift = Math.abs(alignmentDelta) >= 10;
+  const learningScore = canLearn ? (learning?.state.score ?? null) : null;
 
   return (
     <div className="axe-stagger-enter flex flex-col gap-5 pb-2">
@@ -95,8 +97,8 @@ export default async function CockpitPage() {
         badge={
           cockpitCalibrated ? "Calibrated" : cockpitPreview ? "Early snapshot" : "Learning"
         }
-        alignmentScore={hasSnapshot && canLearn ? dash.alignment.score : null}
-        signalCount={dash.calibration.signalCount}
+        alignmentScore={learningScore}
+        signalCount={canLearn && learning ? learning.state.dataPoints : undefined}
         message={dash.calibration.message}
       >
       <ActiveSessionChip />
@@ -132,27 +134,24 @@ export default async function CockpitPage() {
       <CockpitTodayStrip
         initial={dash.today}
         traderScores={dash.traderScores}
-        axeAlignment={hasSnapshot && canLearn ? dash.alignment : null}
+        axeAlignment={learningScore != null ? { ...dash.alignment, score: learningScore } : null}
       />
 
-      {canLearn ? (
-        <GlassPanel className="p-3.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">
-            How growth happens
-          </p>
-          <p className="mt-1.5 text-xs leading-relaxed text-tos-muted">
-            Cockpit grows from real per-user signals: chat feedback, journal notes, closed trades, and feed/alert actions.
-            You currently have <span className="font-semibold text-tos-text">{dash.calibration.signalCount}</span> signals
-            in this snapshot.
-          </p>
-          <p className="mt-1.5 text-[11px] text-tos-dim">
-            Fastest way to move Learning Arc: rate AXE replies, journal trades, and refresh snapshot after your session.
-          </p>
-        </GlassPanel>
-      ) : null}
 
       {canLearn ? (
         <>
+          <CockpitLearningModel
+            initial={
+              learning
+                ? {
+                    state: learning.state,
+                    changes: learning.changes,
+                    history: learning.history,
+                    overridesAvailable: learning.overridesAvailable,
+                  }
+                : null
+            }
+          />
           <CockpitLearningArc data={dash.learningArc} />
           <CockpitKnowledgeFiles data={knowledge} />
         </>
@@ -212,43 +211,6 @@ export default async function CockpitPage() {
             </GlassPanel>
           ) : null}
 
-          <CockpitAlignment data={dash.alignment} calibrationMessage={dash.calibration.message} />
-
-          <GlassPanel className="p-3">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-tos-dim">Two scores</p>
-            <p className="mt-1 text-xs leading-relaxed text-tos-muted">
-              <span className="font-medium text-tos-text">Trader score</span> (top) averages Discipline,
-              Execution, Risk and Patience from your last 90 days of journal and trade history.
-            </p>
-            <p className="mt-1.5 text-xs leading-relaxed text-tos-muted">
-              <span className="font-medium text-tos-text">AXE alignment {dash.alignment.score}</span> (below)
-              measures how well AXE fits your book —{" "}
-              <span className="font-medium text-tos-text">100 = fully aligned</span>. Based on{" "}
-              {dash.calibration.signalCount} real workspace signals from the latest snapshot.
-            </p>
-            <p className="mt-1 text-[11px] text-tos-dim">
-              Last recalculated:{" "}
-              {dash.calibration.lastCalculatedAt
-                ? new Date(dash.calibration.lastCalculatedAt).toLocaleString()
-                : "not yet"}
-              {dash.calibration.missingSignals.length
-                ? ` · Missing: ${dash.calibration.missingSignals.join(", ")}`
-                : ""}
-            </p>
-            {showRecalibrationCue ? (
-              <p
-                className={`mt-1.5 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-                  significantShift
-                    ? "border-tos-warm/40 bg-tos-warm/10 text-tos-warm"
-                    : "border-emerald-400/35 bg-emerald-500/10 text-emerald-300"
-                }`}
-              >
-                {significantShift
-                  ? `Latest recalibration · ${alignmentDelta >= 0 ? "+" : ""}${alignmentDelta} pts`
-                  : "Latest recalibration · stable"}
-              </p>
-            ) : null}
-          </GlassPanel>
 
           <CockpitLearningProgress
             headline={dash.learningProgress.headline}

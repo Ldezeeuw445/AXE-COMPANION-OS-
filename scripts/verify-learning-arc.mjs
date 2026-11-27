@@ -428,4 +428,33 @@ check("real-world symbol suffixes normalise the way the live data needs", () => 
   assert.equal(normaliseSymbol("SPX500"), "SPX500");
 });
 
+check("learning model v2: the brief line comes from the model, never a constant", () => {
+  assert.ok(/learningBriefSentence/.test(briefing), "the locked ALIGNMENT SCORE line must come from learning model v2");
+  assert.ok(
+    !/aligned — AXE knows your style well\.`/.test(briefing),
+    "'AXE knows your style well' was a constant glued onto every score",
+  );
+});
+
+check("learning model v2: the loop runs daily and writes a snapshot", () => {
+  const batch = codeOnly(readFileSync("src/services/cockpitSnapshotBatchService.ts", "utf8"));
+  assert.ok(/persistLearningSnapshot\(supabase, userId\)/.test(batch));
+});
+
+check("re-scoring the same trade does not append another learning signal", () => {
+  const journaling = codeOnly(readFileSync("src/services/journalingService.ts", "utf8"));
+  assert.ok(/previousScore !== null && previousScore === Number\(row\.alignment_score\)/.test(journaling));
+});
+
+check("learning model v2 has no smoothing and no volume bonus", () => {
+  const model = codeOnly(readFileSync("src/lib/axe/learningModel.ts", "utf8"));
+  assert.ok(!/depthBonus|stabiliz|alpha/i.test(model));
+});
+
+check("coaching mode follows AXE fit, strict while still learning", () => {
+  const engine = codeOnly(readFileSync("src/services/axeEngineService.ts", "utf8"));
+  assert.ok(/coachingModeFromLearning\(learning\?\.state \?\? null\)/.test(engine));
+  assert.ok(!/alignmentPct \* 0\.55/.test(engine), "the pinned legacy score must not drive the mode");
+});
+
 console.log(`\n${passed} checks passed`);

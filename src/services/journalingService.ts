@@ -204,10 +204,14 @@ async function journalTrades(
 
       const { data: existing } = await supabase
         .from("trade_journal_labels")
-        .select("trade_id")
+        .select("trade_id, alignment_score")
         .eq("user_id", userId)
         .eq("trade_id", trade.id)
         .maybeSingle();
+      const previousScore =
+        existing && (existing as { alignment_score?: number | null }).alignment_score != null
+          ? Number((existing as { alignment_score?: number | null }).alignment_score)
+          : null;
 
       const row = buildAxeJournalLabelRow({
         userId,
@@ -259,6 +263,12 @@ async function journalTrades(
 
       // Behavioral signal so the cockpit alignment score is grounded in AXE's
       // actual per-trade assessments rather than a one-off GPT guess.
+      //
+      // Only when something was learned: a new review, or a changed score.
+      // Re-scoring the same trade used to append a signal every time — 78k
+      // signals for ~300 trades on one account by Sept 2026 — which buried
+      // real events and made "signal count" meaningless as evidence volume.
+      if (previousScore !== null && previousScore === Number(row.alignment_score)) continue;
       await recordLearningSignal(supabase, userId, "trade_alignment", {
         trade_id: trade.id,
         symbol: trade.symbol,

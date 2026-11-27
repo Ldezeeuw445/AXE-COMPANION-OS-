@@ -51,14 +51,14 @@ export function CockpitLearningSection({
           <div className="home-card-b">
             <div className="home-gauges" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
               <div className="home-gauge">
-                <div className="home-cap">AXE alignment</div>
+                <div className="home-cap">AXE fit</div>
                 <div className="home-gauge-val">{alignmentScore != null ? alignmentScore : "—"}</div>
-                <div className="home-gauge-sub">100 = fully aligned</div>
+                <div className="home-gauge-sub">{alignmentScore != null ? "From your trades and feedback" : "Still learning"}</div>
               </div>
               <div className="home-gauge">
-                <div className="home-cap">Signals</div>
+                <div className="home-cap">Data points</div>
                 <div className="home-gauge-val">{signalCount ?? "—"}</div>
-                <div className="home-gauge-sub">From the latest snapshot</div>
+                <div className="home-gauge-sub">Closed trades + rated replies, 90 days</div>
               </div>
             </div>
             <p className="home-gauge-sub" style={{ marginTop: 10 }}>

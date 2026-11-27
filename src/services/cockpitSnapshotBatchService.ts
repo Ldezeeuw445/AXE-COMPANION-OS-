@@ -4,12 +4,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { filterUsersWithFeature } from "@/services/entitledUsers";
 import { generateCockpitSnapshot } from "@/services/cockpitSnapshotService";
 import { refreshAxeEngineProfile } from "@/services/axeEngineService";
+import { persistLearningSnapshot } from "@/services/learningModelService";
 
 export type CockpitSnapshotBatchSummary = {
   attempted: number;
   generated: number;
   skipped: number;
   failed: number;
+  /** Learning model v2 snapshots written (see learningModel.ts). */
+  learningSnapshots: number;
 };
 
 export async function runCockpitSnapshotBatch(
@@ -22,6 +25,7 @@ export async function runCockpitSnapshotBatch(
     generated: 0,
     skipped: 0,
     failed: 0,
+    learningSnapshots: 0,
   };
 
   const { data: entitlements, error } = await supabase
@@ -52,6 +56,11 @@ export async function runCockpitSnapshotBatch(
       summary.failed += 1;
       console.warn("[cockpitSnapshotBatch] failed", userId, result.error);
     }
+    // The learning loop: one explainable model-v2 snapshot per user per day,
+    // independent of whether the legacy cockpit snapshot had enough signals.
+    const learning = await persistLearningSnapshot(supabase, userId);
+    if (learning.ok) summary.learningSnapshots += 1;
+    else console.warn("[cockpitSnapshotBatch] learning snapshot failed", userId.slice(0, 8), learning.error);
     await refreshAxeEngineProfile(supabase, userId, "cockpit_batch").catch((err) =>
       console.warn("[cockpitSnapshotBatch] engine refresh failed", userId, err instanceof Error ? err.message : String(err)),
     );
