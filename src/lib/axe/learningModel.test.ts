@@ -240,3 +240,28 @@ describe("learningBriefSentence", () => {
     assert.match(learningBriefSentence(null), /could not read/);
   });
 });
+
+describe("coachingModeFromLearning", () => {
+  it("is strict while still learning or unreadable", async () => {
+    const { coachingModeFromLearning } = await import("./learningModel");
+    const learning = coachingModeFromLearning(computeLearningState(input({})));
+    assert.equal(learning.gateMode, "strict");
+    assert.equal(learning.confidenceScore, 0);
+    assert.match(learning.reason, /Still learning \(0 of 20/);
+    assert.equal(coachingModeFromLearning(null).gateMode, "strict");
+  });
+  it("follows the AXE fit once scored, and low confidence is never proactive", async () => {
+    const { coachingModeFromLearning } = await import("./learningModel");
+    const base = computeLearningState(input({}));
+    const scored = (score: number, confidence: "low" | "medium" | "high") =>
+      coachingModeFromLearning({ ...base, status: "scored", score, confidence });
+    assert.equal(scored(30, "high").gateMode, "strict");
+    assert.equal(scored(60, "medium").gateMode, "guided");
+    assert.equal(scored(80, "medium").gateMode, "proactive");
+    assert.equal(scored(80, "high").tier, "high");
+    const capped = scored(90, "low");
+    assert.equal(capped.gateMode, "guided");
+    assert.match(capped.reason, /capped/);
+    assert.equal(scored(69, "low").confidenceScore, 69);
+  });
+});

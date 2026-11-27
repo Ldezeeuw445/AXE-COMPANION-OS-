@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normaliseAlignment } from "@/lib/axe/learningArc";
+import { coachingModeFromLearning } from "@/lib/axe/learningModel";
+import { getLearningModel } from "@/services/learningModelService";
 
 export type AxeEngineConfidenceTier = "low" | "medium" | "high";
 export type AxeEngineGateMode = "strict" | "guided" | "proactive";
@@ -43,12 +45,6 @@ const localCache = new Map<string, { profile: AxeEngineProfile; expiresAt: numbe
 function clampInt(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.max(min, Math.min(max, Math.round(value)));
-}
-
-function computeTier(score: number): { tier: AxeEngineConfidenceTier; gateMode: AxeEngineGateMode } {
-  if (score >= 75) return { tier: "high", gateMode: "proactive" };
-  if (score >= 45) return { tier: "medium", gateMode: "guided" };
-  return { tier: "low", gateMode: "strict" };
 }
 
 function toProfile(row: EngineProfileRow): AxeEngineProfile {
@@ -134,42 +130,38 @@ export async function refreshAxeEngineProfile(
     ]);
 
     /*
-     * Alignment carries 55% of the confidence score, and confidence sets the
-     * gate mode — how freely AXE is allowed to speak and act. So a trader
-     * with no snapshot yet has to land somewhere, and it has to be the
-     * cautious end: unmeasured counts as 0 and the gate stays strict.
-     *
-     * What was wrong was not the 0, it was that nothing recorded it as a
-     * guess. `rationale` is what a trader (or I) reads to understand a score,
-     * and a 0 there was indistinguishable from a measured zero. It now says
-     * which it was. Shared normaliser so the engine and the learning arc
-     * cannot disagree about what the column means — it has held both 0–1
-     * floats and 0–100 integers over its life.
+     * Coaching mode (how freely AXE speaks) now follows AXE learning model v2
+     * — the same AXE fit the cockpit and brief show (Luka t72u). The old
+     * input was 55% a smoothed, pinned alignment score plus activity counts
+     * that saturate, so the mode could not reflect what AXE actually knows.
+     * While the model is still learning, or cannot be read, the mode is the
+     * most conservative one. This only selects the prompt/brief mode; it does
+     * not touch order or auto-trade execution.
      */
-    const measuredAlignment = normaliseAlignment(snapshotRes.data?.alignment_score);
+    const learning = await getLearningModel(supabase, userId).catch(() => null);
+    const decision = coachingModeFromLearning(learning?.state ?? null);
+    const confidenceScore = clampInt(decision.confidenceScore, 0, 100);
+    const tier = decision.tier;
+    const gateMode = decision.gateMode;
+    const measuredAlignment = learning?.state.score ?? null;
     const alignmentPct = clampInt(measuredAlignment ?? 0, 0, 100);
     const signalCount = Number(signalCountRes.count ?? 0);
     const tradeLabelCount = Number(tradeLabelCountRes.count ?? 0);
     const memoryCount = Number(memoryCountRes.count ?? 0);
     const snapshotSignalCount = Number(snapshotRes.data?.signal_count ?? 0);
     const totalSignals = Math.max(signalCount, snapshotSignalCount);
-
-    const signalComponent = Math.min(100, totalSignals * 1.4);
-    const tradeLabelComponent = Math.min(100, tradeLabelCount * 12);
-    const memoryComponent = Math.min(100, memoryCount * 5);
-    const confidenceScore = clampInt(
-      alignmentPct * 0.55 + signalComponent * 0.25 + tradeLabelComponent * 0.15 + memoryComponent * 0.05,
-      0,
-      100,
-    );
-    const { tier, gateMode } = computeTier(confidenceScore);
     const rationale: Record<string, unknown> = {
+      model: "learning_v2",
+      reason: decision.reason,
       alignmentPct,
-      /** False means `alignmentPct` is a cautious default, not a measurement. */
+      /** False means `alignmentPct` is 0 because AXE is still learning, not a measurement. */
       alignmentMeasured: measuredAlignment !== null,
-      signalComponent: clampInt(signalComponent, 0, 100),
-      tradeLabelComponent: clampInt(tradeLabelComponent, 0, 100),
-      memoryComponent: clampInt(memoryComponent, 0, 100),
+      learningStatus: learning?.state.status ?? "unavailable",
+      learningConfidence: learning?.state.confidence ?? "insufficient",
+      dataPoints: learning?.state.dataPoints ?? 0,
+      requiredPoints: learning?.state.requiredPoints ?? null,
+      /** Legacy snapshot score, kept for comparison only — no longer an input. */
+      legacyAlignmentPct: normaliseAlignment(snapshotRes.data?.alignment_score),
       totalSignals,
       source,
     };

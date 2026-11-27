@@ -789,3 +789,54 @@ export function learningBriefSentence(state: LearningState | null): string {
   const tail = weakest ? ` Weakest part: ${weakest.label.toLowerCase()} at ${weakest.score}%.` : "";
   return `AXE fit is ${state.score}% from ${plural(state.counts.trades, "closed trade")} and ${plural(state.counts.votes, "rated reply")}, ${state.confidence} confidence.${tail}`;
 }
+
+/* ── Coaching mode ──────────────────────────────────────────────────────── */
+
+export type CoachingTier = "low" | "medium" | "high";
+export type CoachingGateMode = "strict" | "guided" | "proactive";
+
+export type CoachingModeDecision = {
+  /** 0–100; equals the AXE fit once scored, 0 while learning or unreadable. */
+  confidenceScore: number;
+  tier: CoachingTier;
+  gateMode: CoachingGateMode;
+  /** Why this mode, in one sentence a trader can read. */
+  reason: string;
+};
+
+/**
+ * How freely AXE speaks (coaching tone in the system prompt / brief), from
+ * the AXE fit. This only picks the mode; it does not place, size, approve or
+ * block any order — execution guards are separate and unchanged.
+ *
+ *  - unreadable or still learning (< required data points/parts) → strict
+ *  - scored with low confidence → never proactive (at most guided)
+ *  - otherwise: fit ≥ 75 proactive, ≥ 45 guided, else strict
+ */
+export function coachingModeFromLearning(state: LearningState | null): CoachingModeDecision {
+  if (!state) {
+    return { confidenceScore: 0, tier: "low", gateMode: "strict", reason: "Learning data unreadable — most conservative mode." };
+  }
+  if (state.status !== "scored" || state.score == null) {
+    return {
+      confidenceScore: 0,
+      tier: "low",
+      gateMode: "strict",
+      reason: `Still learning (${Math.min(state.dataPoints, state.requiredPoints)} of ${state.requiredPoints} data points) — most conservative mode.`,
+    };
+  }
+  const score = Math.max(0, Math.min(100, Math.round(state.score)));
+  let gateMode: CoachingGateMode = score >= 75 ? "proactive" : score >= 45 ? "guided" : "strict";
+  let capped = false;
+  if (gateMode === "proactive" && (state.confidence === "low" || state.confidence === "insufficient")) {
+    gateMode = "guided";
+    capped = true;
+  }
+  const tier: CoachingTier = gateMode === "proactive" ? "high" : gateMode === "guided" ? "medium" : "low";
+  return {
+    confidenceScore: score,
+    tier,
+    gateMode,
+    reason: `AXE fit ${score}% (${state.confidence} confidence) → ${gateMode}${capped ? " (capped: low confidence is never proactive)" : ""}.`,
+  };
+}

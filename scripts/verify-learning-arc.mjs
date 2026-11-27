@@ -451,4 +451,10 @@ check("learning model v2 has no smoothing and no volume bonus", () => {
   assert.ok(!/depthBonus|stabiliz|alpha/i.test(model));
 });
 
+check("coaching mode follows AXE fit, strict while still learning", () => {
+  const engine = codeOnly(readFileSync("src/services/axeEngineService.ts", "utf8"));
+  assert.ok(/coachingModeFromLearning\(learning\?\.state \?\? null\)/.test(engine));
+  assert.ok(!/alignmentPct \* 0\.55/.test(engine), "the pinned legacy score must not drive the mode");
+});
+
 console.log(`\n${passed} checks passed`);
