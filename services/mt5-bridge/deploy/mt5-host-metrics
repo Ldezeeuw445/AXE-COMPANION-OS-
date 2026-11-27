@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Linux helper: measure CPU, RAM and disk on the MT5-bridge box.
+
+Printed lines match AXE Core's LINUX_PROBE (CPU / MEM / DISK), so a
+forced-command SSH user can run only this script. --write also stores
+JSON for GET /host/metrics (the Wine process reads the file).
+
+No arguments talk to MT5. No secrets are written.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+from datetime import datetime, timezone
+
+DEFAULT_OUT = "/opt/mt5-bridge/var/host-metrics.json"
+
+
+def _cpu_pair() -> tuple[float, float]:
+    with open("/proc/stat", encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("cpu "):
+                # user..softirq, matching AXE Core LINUX_PROBE (no steal/guest).
+                parts = [float(x) for x in line.split()[1:8]]
+                total = sum(parts)
+                idle = parts[3] + (parts[4] if len(parts) > 4 else 0)
+                return total, idle
+    raise RuntimeError("/proc/stat has no cpu line")
+
+
+def _mem() -> tuple[float, float]:
+    total = avail = None
+    with open("/proc/meminfo", encoding="utf-8") as f:
+        for line in f:
+            k, v, *_ = line.split()
+            if k == "MemTotal:":
+                total = float(v)
+            elif k == "MemAvailable:":
+                avail = float(v)
+    if not total or avail is None:
+        raise RuntimeError("/proc/meminfo missing MemTotal/MemAvailable")
+    return total, avail
+
+
+def _disk_pct() -> float:
+    st = os.statvfs("/")
+    total = st.f_blocks * st.f_frsize
+    used = (st.f_blocks - st.f_bfree) * st.f_frsize
+    if total <= 0:
+        raise RuntimeError("statvfs / returned no size")
+    return round(used / total * 100, 1)
+
+
+def measure() -> dict:
+    a_total, a_idle = _cpu_pair()
+    time.sleep(0.5)
+    b_total, b_idle = _cpu_pair()
+    mem_t, mem_a = _mem()
+    cpu = round(max(0.0, min(100.0, (1 - (b_idle - a_idle) / (b_total - a_total)) * 100)), 1) if b_total > a_total else None
+    mem = round(max(0.0, min(100.0, (mem_t - mem_a) / mem_t * 100)), 1)
+    disk = _disk_pct()
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return {
+        "cpu": cpu,
+        "mem": mem,
+        "disk": disk,
+        "measured_at": stamp,
+        "_probe": {
+            "cpu_line": f"CPU {a_total} {a_idle} {b_total} {b_idle}",
+            "mem_line": f"MEM {mem_t:.0f} {mem_a:.0f}",
+            "disk_line": f"DISK {disk}%",
+        },
+    }
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(description="Measure host CPU, RAM and disk for the MT5 bridge.")
+    p.add_argument("--write", nargs="?", const=DEFAULT_OUT, default=None, metavar="PATH",
+                   help=f"also write JSON (default path {DEFAULT_OUT})")
+    p.add_argument("--quiet", action="store_true", help="do not print CPU/MEM/DISK lines")
+    args = p.parse_args(argv)
+    row = measure()
+    probe = row.pop("_probe")
+    if not args.quiet:
+        sys.stdout.write(probe["cpu_line"] + "\n" + probe["mem_line"] + "\n" + probe["disk_line"] + "\n")
+    if args.write:
+        path = args.write
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"cpu": row["cpu"], "mem": row["mem"], "disk": row["disk"], "measured_at": row["measured_at"]}, f)
+            f.write("\n")
+        os.replace(tmp, path)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as exc:  # noqa: BLE001 — cron/timer should see the reason
+        print(f"mt5-host-metrics: {exc}", file=sys.stderr)
+        raise SystemExit(1)

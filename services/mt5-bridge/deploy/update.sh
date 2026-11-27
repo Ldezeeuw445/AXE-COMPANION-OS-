@@ -31,12 +31,19 @@ journalctl -u mt5-bridge --since "-12 hours" --no-pager 2>/dev/null | grep -vE '
 echo "-- terminal:"
 journalctl -u mt5-terminal --since "-12 hours" --no-pager 2>/dev/null | tail -6 | cut -c1-200 || true
 
-say "units and watchdog"
+say "units, watchdog and host metrics"
+install -m 0755 "$APP/deploy/mt5-host-metrics" /usr/local/bin/mt5-host-metrics
+install -d -o mt5 -g mt5 -m 0755 /opt/mt5-bridge/var
 install -m 0644 "$APP/deploy/mt5-bridge.service" "$APP/deploy/mt5-bridge-watchdog.service" \
-  "$APP/deploy/mt5-bridge-watchdog.timer" /etc/systemd/system/
+  "$APP/deploy/mt5-bridge-watchdog.timer" \
+  "$APP/deploy/mt5-bridge-metrics.service" "$APP/deploy/mt5-bridge-metrics.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now mt5-bridge-watchdog.timer >/dev/null
+systemctl enable --now mt5-bridge-metrics.timer >/dev/null
 echo "watchdog: $(systemctl is-active mt5-bridge-watchdog.timer)"
+echo "metrics timer: $(systemctl is-active mt5-bridge-metrics.timer)"
+# Write one snapshot now so /host/metrics has a file before the first tick.
+sudo -u mt5 /usr/local/bin/mt5-host-metrics --quiet --write /opt/mt5-bridge/var/host-metrics.json || true
 
 say "bridge restart (the terminal keeps running)"
 systemctl reset-failed mt5-bridge 2>/dev/null || true
@@ -50,4 +57,7 @@ done
 echo "health: ${health:-no answer after 60 s}"
 TOKEN=$(grep ^MT5_BRIDGE_TOKEN= "$ENV_FILE" | cut -d= -f2)
 curl -s -m 15 -H "auth-token: $TOKEN" http://127.0.0.1:8765/status | sed -E 's/"login": *[0-9]+/"login":"[login]"/'
+echo
+# Host metrics only (percentages + timestamp). The token itself is not printed.
+curl -s -m 15 -H "auth-token: $TOKEN" http://127.0.0.1:8765/host/metrics || echo "host metrics: no answer"
 echo

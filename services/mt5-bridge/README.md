@@ -27,8 +27,12 @@ same JSON:
 | `GET /historical-market-data/symbols/{s}/timeframes/{tf}/candles` | `copy_rates_from_pos()` / `copy_rates_from()` |
 | `POST /trade` (market, pending, modify, close, partial close, cancel) | `order_send()` |
 
-Plus `GET /health` (no token, says only whether the terminal is connected) and
-`GET /status` (token; login, server, broker UTC offset).
+Plus `GET /health` (no token, says only whether the terminal is connected),
+`GET /status` (token; login, server, broker UTC offset), and `GET /host/metrics`
+(the trading token or a dedicated `MT5_BRIDGE_METRICS_TOKEN`; CPU, RAM and disk
+percentages plus a timestamp — no login, no account). AXE Core uses this for
+the System monitor. A Linux timer writes the numbers every 15 s, because the
+bridge process itself runs in Wine and cannot always see `/proc`.
 
 Times: MT5 stamps everything in broker server time. The bridge measures the
 offset from a fresh tick (every 10 min) and returns `time` in UTC and
@@ -45,7 +49,9 @@ makes `/health` say `ok: false` within seconds instead of blocking every call.
   (over VNC through an SSH tunnel, "save password" on). `initialize()` only
   attaches to that logged-in terminal.
 - **Token on every data call**, compared in constant time; the bridge refuses
-  to start with a token under 32 characters.
+  to start with a token under 32 characters. `MT5_BRIDGE_METRICS_TOKEN` (optional,
+  also ≥ 32 characters) may only call `GET /host/metrics`, never `/status` or
+  `/trade`.
 - **One account per bridge.** Any other account id is a 404.
 - **Orders are off** until `MT5_BRIDGE_TRADING=on`. Companion's own checks
   (login, ownership, live-trading setting, confirm per order) come first; this
@@ -121,6 +127,10 @@ It prints what happened in the last 12 hours (services, out-of-memory kills,
 bridge and terminal log), installs the unit files and the watchdog, and
 restarts **only the bridge**. `install.sh` stops the terminal to update Wine,
 and a restarted terminal can come back with the Algo Trading button off.
+
+`mt5-bridge-metrics.timer` runs `deploy/mt5-host-metrics --write` every 15
+seconds (Linux Python, user `mt5`, no MT5 calls). `GET /host/metrics` reads
+that file.
 
 `mt5-bridge-watchdog.timer` runs `deploy/watchdog.sh` every minute:
 - no answer on `/health` twice in a row → restart the bridge;
