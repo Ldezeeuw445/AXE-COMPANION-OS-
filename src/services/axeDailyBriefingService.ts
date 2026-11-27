@@ -11,6 +11,8 @@
  */
 
 import "server-only";
+import { getLearningModel } from "@/services/learningModelService";
+import { learningBriefSentence } from "@/lib/axe/learningModel";
 
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 import { callLLM, type LLMRequest } from "@/services/llmClient";
@@ -180,6 +182,14 @@ export interface TraderBriefingContext {
    * knew nothing about was told it was half way there.
    */
   alignment: number | null;
+  /**
+   * The locked ALIGNMENT SCORE sentence, from learning model v2
+   * (`learningBriefSentence`): "still learning, X of Y data points" until
+   * there is enough data, then the score with its basis and weakest part.
+   * Replaces "You're at N% aligned — AXE knows your style well.", whose second
+   * half was a constant glued onto every number.
+   */
+  alignmentLine: string;
   periodPerformance: BriefPeriodPerformance;
   /**
    * The indicators and SMC overlays this trader actually has switched on,
@@ -215,11 +225,12 @@ export interface TraderBriefingContext {
  * sentence. There is no percentage to lock in that case, so the locked
  * sentence says what is missing instead.
  */
-function alignmentSentence(alignment: number | null): string {
+function alignmentSentence(alignment: number | null, line?: string | null): string {
+  if (line) return line;
   if (alignment === null) {
     return "AXE has not scored your alignment yet — close a trade, or journal one with AXE, and it will.";
   }
-  return `You're at ${Math.max(0, Math.min(100, Math.round(alignment)))}% aligned — AXE knows your style well.`;
+  return `AXE fit is ${Math.max(0, Math.min(100, Math.round(alignment)))}%.`;
 }
 
 /**
@@ -227,14 +238,14 @@ function alignmentSentence(alignment: number | null): string {
  * This prevents model drift/hallucinations like "75%" when true score is 48%,
  * and — when there is no score — stops it inventing one at all.
  */
-function syncBriefAlignmentSection(body: string, alignment: number | null): string {
+function syncBriefAlignmentSection(body: string, alignment: number | null, line?: string | null): string {
   const source = body.replace(/\r\n/g, "\n").trim();
   if (!source) return source;
 
   const lines = source.split("\n");
   const targetHeader = "ALIGNMENT SCORE";
   const targetIdx = lines.findIndex((line) => normalizeBriefHeader(line) === targetHeader);
-  const lockedSentence = alignmentSentence(alignment);
+  const lockedSentence = alignmentSentence(alignment, line);
 
   if (targetIdx === -1) {
     return `${source}\n\nALIGNMENT SCORE\n${lockedSentence}`;
@@ -313,10 +324,11 @@ export async function buildBriefingContext(
 ): Promise<TraderBriefingContext> {
   const now = options?.now ?? new Date();
   try {
-    const [profile, arc, chartSetup, watchlist, focusPrefs] = await Promise.all([
+    const [profile, arc, chartSetup, learning, watchlist, focusPrefs] = await Promise.all([
       fetchProfileDirect(supabase, traderId),
       getTraderLearningArc(traderId, supabase),
       getChartSetup(supabase, traderId),
+      getLearningModel(supabase, traderId).catch(() => null),
       loadWatchlistSymbols(supabase, traderId).catch(() => [] as string[]),
       loadBriefFocusPrefs(supabase, traderId).catch(() => null),
     ]);
@@ -375,7 +387,9 @@ export async function buildBriefingContext(
       focus,
       marketStatus,
       accounts: accountsRes.accounts,
-      alignment: arc.alignmentScore,
+      // Learning model v2 across all accounts; null while AXE is still learning.
+      alignment: learning ? learning.state.score : null,
+      alignmentLine: learningBriefSentence(learning?.state ?? null),
       periodPerformance,
       chartSetup,
       liveSession,
@@ -400,6 +414,7 @@ export async function buildBriefingContext(
       marketStatus: summarizeMarketStatus([], now),
       accounts: [],
       alignment: null,
+      alignmentLine: learningBriefSentence(null),
       periodPerformance: {
         since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
         trades: [],
@@ -493,7 +508,7 @@ function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?
 Key facts:
 - Their local time: ${timeStr} (${context.timezone})
 - ${describeFocusForPrompt(context.focus).replace(/\n/g, "\n  ")}
-- AXE alignment score: ${hasAlignment ? `${context.alignment}% (how well AXE has learned this trader's style)` : "not scored yet — AXE has taken no snapshot of this trader. Do not state or imply a number."}
+- AXE alignment score: ${hasAlignment ? `${context.alignment}% (AXE fit from learning model v2, ${context.alignmentLine})` : "not scored yet — AXE has taken no snapshot of this trader. Do not state or imply a number."}
 - AXE engine confidence: ${context.engineConfidence.score}/100 (${context.engineConfidence.tier}, gate: ${context.engineConfidence.gateMode})
 - Session open as this is written: ${context.liveSession}
 - Session they actually enter in: ${
@@ -563,7 +578,7 @@ RECENT PERFORMANCE
 ALIGNMENT SCORE
 [${
       hasAlignment
-        ? `Exactly ONE sentence, e.g. "You're at ${context.alignment}% aligned — AXE knows your style well."`
+        ? `Exactly ONE sentence, exactly: "${context.alignmentLine}"`
         : "Exactly ONE sentence saying AXE has not scored alignment yet and what would produce one — a closed trade, or a trade journalled with AXE. Never state a percentage here."
     } Do NOT repeat the words "Alignment score" in this sentence.]
 
@@ -699,7 +714,11 @@ export async function generateMorningBrief(
 
     // Rows written before live-price checking existed are regenerated, not served.
     if (existingRow?.body && hasPriceFactsMarker(existingRow.highlights)) {
-      const syncedBody = syncBriefAlignmentSection(String(existingRow.body), contextForDate.alignment);
+      const syncedBody = syncBriefAlignmentSection(
+        String(existingRow.body),
+        contextForDate.alignment,
+        contextForDate.alignmentLine,
+      );
       if (syncedBody !== String(existingRow.body)) {
         await writeSb
           .from("axe_daily_briefings")
@@ -824,6 +843,7 @@ export async function generateMorningBrief(
       .replace(/\n{3,}/g, "\n\n")
       .trim(),
       context.alignment,
+      context.alignmentLine,
     ),
     context,
   );
