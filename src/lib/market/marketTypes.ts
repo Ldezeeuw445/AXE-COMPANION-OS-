@@ -6,6 +6,7 @@ export type ProviderId =
   | "polygon"
   | "finnhub"
   | "forexFactory"
+  | "financeCalendar"
   | "eodhd"
   | "unusualWhales"
   | "demo";
@@ -69,6 +70,12 @@ export type EconomicEvent = {
   forecast?: number | string | null;
   previous?: number | string | null;
   unit?: string | null;
+  /** actual − forecast in the release unit (Finance Calendar only). */
+  surprise?: number | string | null;
+  /** Finance Calendar page for the release (attribution / details). */
+  eventUrl?: string | null;
+  /** Date known, time not (Finance Calendar date-only rows). */
+  allDay?: boolean;
   provider: ProviderId;
 };
 

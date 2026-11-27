@@ -4,7 +4,7 @@ import { getMetaApiToken } from "@/lib/mt5/metaApiEnv";
 import { normalizeChartTfKey } from "@/lib/broker/chartTimeframes";
 import type { ChartLiveEvent } from "@/lib/chart/liveContract";
 import { chartSseMaxDurationMs, runChartLivePoller } from "@/lib/chart/livePoller";
-import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
+import { loadDisplayEconomicCalendar } from "@/lib/market/calendarProvider";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
       request.signal.addEventListener("abort", () => close());
 
       try {
-        const events = await loadEconomicCalendar({
+        const events = await loadDisplayEconomicCalendar({
           symbol: requestedDisplaySymbol,
           daysAhead: 1,
           limit: 5,
