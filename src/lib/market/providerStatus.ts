@@ -1,4 +1,5 @@
 import { firstNonEmptyEnv } from "@/lib/envFallback";
+import { isSourceAvailable } from "@/lib/intel/intelSources";
 import type { ProviderId, ProviderStatus } from "@/lib/market/marketTypes";
 
 /**
@@ -79,9 +80,15 @@ export function detectProviders(): ProviderStatus[] {
     {
       id: "unusualWhales",
       label: "AXE Intel",
-      state: getUnusualWhalesKey() ? "live" : "missing_config",
-      description: "Premium smart-money flow (UW). Insider trades use free SEC EDGAR without this key.",
-      env: ["UNUSUAL_WHALES_TOKEN", "UNUSUAL_WHALES_API_KEY"],
+      state: isSourceAvailable("unusual_whales", process.env)
+        ? getUnusualWhalesKey()
+          ? "live"
+          : "missing_config"
+        : "paused",
+      description: isSourceAvailable("unusual_whales", process.env)
+        ? "Premium smart-money flow (UW). Insider trades use free SEC EDGAR without this key."
+        : "Unusual Whales is paused (no subscription). Set UNUSUAL_WHALES_ENABLED=true to use it again.",
+      env: ["UNUSUAL_WHALES_ENABLED", "UNUSUAL_WHALES_TOKEN", "UNUSUAL_WHALES_API_KEY"],
     },
   ];
 }
