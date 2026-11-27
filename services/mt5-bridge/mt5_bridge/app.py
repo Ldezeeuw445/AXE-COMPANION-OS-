@@ -14,6 +14,7 @@ ownership, the live-trading setting, the confirm per order) run before a
 request ever gets here; this switch is a second lock on the box itself.
 """
 
+import hashlib
 import hmac
 import os
 
@@ -40,6 +41,11 @@ def create_app(mt5: Any = None, terminal: Optional[Terminal] = None) -> FastAPI:
     if not account_id:
         raise RuntimeError("MT5_BRIDGE_ACCOUNT_ID must be set (the id Companion stores for this account)")
 
+    metrics_token = os.environ.get("MT5_BRIDGE_METRICS_TOKEN", "").strip()
+    # A short leftover value must not be accepted as a second key.
+    if len(metrics_token) < 32:
+        metrics_token = ""
+
     mt5 = mt5 if mt5 is not None else _load_mt5()
     term = terminal or Terminal(mt5, os.environ.get("MT5_TERMINAL_PATH") or None)
     app = FastAPI(title="MT5 bridge", docs_url=None, redoc_url=None, openapi_url=None)
@@ -47,9 +53,40 @@ def create_app(mt5: Any = None, terminal: Optional[Terminal] = None) -> FastAPI:
     def trading_on() -> bool:
         return os.environ.get("MT5_BRIDGE_TRADING", "off").strip().lower() == "on"
 
-    def auth(auth_token: str = Header(default="", alias="auth-token")) -> None:
-        if not hmac.compare_digest(auth_token.encode(), token.encode()):
+    def _token_matches(given: str, expected: str) -> bool:
+        # Hash first so a shorter/longer guess cannot raise or leak length.
+        if not expected:
+            return False
+        return hmac.compare_digest(
+            hashlib.sha256(given.encode()).digest(),
+            hashlib.sha256(expected.encode()).digest(),
+        )
+
+    def _incoming_token(auth_token: str, authorization: str) -> str:
+        if auth_token:
+            return auth_token
+        if authorization.lower().startswith("bearer "):
+            return authorization.split(" ", 1)[1].strip()
+        return ""
+
+    def auth(
+        auth_token: str = Header(default="", alias="auth-token"),
+        authorization: str = Header(default=""),
+    ) -> None:
+        given = _incoming_token(auth_token, authorization)
+        if not _token_matches(given, token):
             raise HTTPException(status_code=401, detail={"error": "UnauthorizedError", "message": "Bad auth-token"})
+
+    def metrics_auth(
+        auth_token: str = Header(default="", alias="auth-token"),
+        authorization: str = Header(default=""),
+    ) -> None:
+        # The trading token works here too. The metrics token, if set, works
+        # only on /host/metrics — it cannot trade or read the account.
+        given = _incoming_token(auth_token, authorization)
+        if _token_matches(given, token) or _token_matches(given, metrics_token):
+            return
+        raise HTTPException(status_code=401, detail={"error": "UnauthorizedError", "message": "Bad auth-token"})
 
     def account(accountId: str) -> str:  # noqa: N803 — MetaApi's path name
         if accountId != account_id:
@@ -80,6 +117,13 @@ def create_app(mt5: Any = None, terminal: Optional[Terminal] = None) -> FastAPI:
     @app.get("/status", dependencies=[Depends(auth)])
     def status() -> Dict[str, Any]:
         return {**term.status(), "accountId": account_id, "trading": trading_on()}
+
+    @app.get("/host/metrics", dependencies=[Depends(metrics_auth)])
+    def host_metrics() -> Dict[str, Any]:
+        # Read-only host load for AXE Core's System monitor. Never includes
+        # login, account, paths or tokens. Implementation: mt5_bridge.host_metrics.
+        from . import host_metrics as _host_metrics
+        return _host_metrics.payload()
 
     @app.get(base + "/account-information", dependencies=[Depends(auth)])
     def account_information(_: str = Depends(account)) -> Dict[str, Any]:

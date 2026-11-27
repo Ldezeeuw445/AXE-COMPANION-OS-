@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh MT5 bridge host metrics every 15 seconds
+
+[Timer]
+OnBootSec=5s
+OnUnitActiveSec=15s
+AccuracySec=3s
+Persistent=true
+Unit=mt5-bridge-metrics.service
+
+[Install]
+WantedBy=timers.target

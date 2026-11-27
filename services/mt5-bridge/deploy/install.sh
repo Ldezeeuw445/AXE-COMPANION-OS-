@@ -71,6 +71,9 @@ MT5_BRIDGE_ACCOUNT_ID=upcomers-12347717
 MT5_BRIDGE_TRADING=off
 BROKER_UTC_OFFSET_HOURS=2
 MT5_TERMINAL_PATH='$TERMINAL_EXE'
+# Optional read-only token for GET /host/metrics (AXE Core). Leave empty
+# until set by hand; it cannot be used to trade or read the account.
+# MT5_BRIDGE_METRICS_TOKEN=
 EOF
   umask 022
 fi
@@ -128,12 +131,17 @@ as_mt5 wine "$PY_EXE" -m pip install --disable-pip-version-check -q -r 'Z:\opt\m
 as_mt5 wine "$PY_EXE" -c "import numpy, MetaTrader5, fastapi, uvicorn; print('bridge packages import:', 'numpy', numpy.__version__, 'MetaTrader5', MetaTrader5.__version__)" 2>&1 | cat
 
 say "terminal and bridge services"
+install -m 0755 "$APP/deploy/mt5-host-metrics" /usr/local/bin/mt5-host-metrics
+install -d -o mt5 -g mt5 -m 0755 /opt/mt5-bridge/var
 install -m 0644 "$APP/deploy/mt5-terminal.service" "$APP/deploy/mt5-bridge.service" \
-  "$APP/deploy/mt5-bridge-watchdog.service" "$APP/deploy/mt5-bridge-watchdog.timer" /etc/systemd/system/
+  "$APP/deploy/mt5-bridge-watchdog.service" "$APP/deploy/mt5-bridge-watchdog.timer" \
+  "$APP/deploy/mt5-bridge-metrics.service" "$APP/deploy/mt5-bridge-metrics.timer" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now mt5-terminal mt5-bridge >/dev/null
 # Restarts the bridge when it stops answering (deploy/watchdog.sh).
 systemctl enable --now mt5-bridge-watchdog.timer >/dev/null
+# Linux-side CPU/RAM/disk snapshot for GET /host/metrics (does not touch MT5).
+systemctl enable --now mt5-bridge-metrics.timer >/dev/null
 
 say "check"
 for _ in $(seq 1 30); do

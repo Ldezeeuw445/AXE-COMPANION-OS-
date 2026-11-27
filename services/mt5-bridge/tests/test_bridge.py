@@ -248,3 +248,50 @@ def test_status_says_whether_mt5_will_take_orders_from_the_bridge(client, mt5):
     mt5.state.algo_trading = False
     j = client.get("/status", headers=H).json()
     assert j["tradeAllowed"] is True and j["algoTrading"] is False
+
+
+# ── host metrics (read-only, for AXE Core) ───────────────────────────────────
+
+METRICS_TOKEN = "m" * 40
+
+
+def test_host_metrics_needs_the_trading_token_or_the_metrics_token(client, mt5, tmp_path, monkeypatch):
+    from mt5_bridge import host_metrics as hm
+    pad = tmp_path / "m.json"
+    pad.write_text('{"cpu": 10, "mem": 20, "disk": 30, "measured_at": "2026-11-27T15:00:00Z"}')
+    monkeypatch.setattr(hm, "DEFAULT_FILES", (str(pad),))
+    monkeypatch.setattr(hm, "collect_from_proc", lambda: None)
+    assert client.get("/host/metrics").status_code == 401
+    assert client.get("/host/metrics", headers={"auth-token": "x" * 40}).status_code == 401
+    r = client.get("/host/metrics", headers=H)
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "cpu": 10.0, "mem": 20.0, "disk": 30.0, "measured_at": "2026-11-27T15:00:00Z"}
+    assert "accountId" not in r.json() and "login" not in r.json() and "trading" not in r.json()
+
+
+def test_metrics_token_can_read_host_metrics_but_cannot_trade_or_see_the_account(mt5, tmp_path, monkeypatch):
+    from mt5_bridge import host_metrics as hm
+    from mt5_bridge.app import create_app
+    monkeypatch.setenv("MT5_BRIDGE_TOKEN", TOKEN)
+    monkeypatch.setenv("MT5_BRIDGE_ACCOUNT_ID", ACCOUNT)
+    monkeypatch.setenv("MT5_BRIDGE_METRICS_TOKEN", METRICS_TOKEN)
+    monkeypatch.delenv("MT5_BRIDGE_TRADING", raising=False)
+    pad = tmp_path / "m.json"
+    pad.write_text('{"cpu": 4, "mem": 5, "disk": 6, "measured_at": "2026-11-27T15:00:00Z"}')
+    monkeypatch.setattr(hm, "DEFAULT_FILES", (str(pad),))
+    monkeypatch.setattr(hm, "collect_from_proc", lambda: None)
+    term = Terminal(mt5)
+    term._offset, term._offset_checked = 7200, 10**12
+    c = TestClient(create_app(mt5=mt5, terminal=term))
+    mh = {"auth-token": METRICS_TOKEN}
+    assert c.get("/host/metrics", headers=mh).status_code == 200
+    assert c.get("/host/metrics", headers={"Authorization": f"Bearer {METRICS_TOKEN}"}).status_code == 200
+    assert c.get("/status", headers=mh).status_code == 401
+    assert c.get(BASE + "/positions", headers=mh).status_code == 401
+    assert c.post(BASE + "/trade", headers=mh, json={"actionType": "ORDER_TYPE_BUY"}).status_code == 401
+
+
+def test_health_still_has_no_host_metrics_or_account(client):
+    j = client.get("/health").json()
+    assert j == {"ok": True, "trading": False}
+    assert set(j) == {"ok", "trading"}

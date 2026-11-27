@@ -1,0 +1,12 @@
+# Writes /opt/mt5-bridge/var/host-metrics.json for GET /host/metrics.
+# The bridge itself runs in Wine and cannot always read /proc; this unit
+# runs as Linux Python, every 15 s, and never talks to MT5.
+[Unit]
+Description=MT5 bridge host metrics snapshot
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=mt5
+# /usr/local/bin is installed by update.sh / install.sh from deploy/mt5-host-metrics
+ExecStart=/usr/local/bin/mt5-host-metrics --quiet --write /opt/mt5-bridge/var/host-metrics.json
