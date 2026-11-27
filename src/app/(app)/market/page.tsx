@@ -8,6 +8,7 @@ import { type AxeToolbarSection } from "@/components/axe/AxeContextToolbar";
 import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { listWatchlistItems } from "@/app/(app)/settings/actions";
 import { buildMarketContext } from "@/lib/market/marketContextService";
+import { FINANCE_CALENDAR_ATTRIBUTION_URL, formatSurprise } from "@/lib/market/sharedEconCalendar";
 import { readActiveSessionCookie } from "@/lib/session/readActiveSession.server";
 import { ActiveSessionSeed } from "@/components/session/ActiveSessionSeed";
 import type {
@@ -91,6 +92,7 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
   const hasCalendarFeed =
     calendarReady ||
     ctx.providers.some((p) => (p.id === "finnhub" || p.id === "forexFactory") && p.state === "live");
+  const fromFinanceCalendar = ctx.events.some((e) => e.provider === "financeCalendar");
   return (
     <div className="axe-stagger-enter flex flex-col gap-4 pb-6">
       <ActiveSessionSeed symbol={symbol} lastTab="markets" />
@@ -175,7 +177,16 @@ export default async function MarketContextPage({ searchParams }: PageProps) {
               <EventRow key={e.id} event={e} />
             ))}
           </ul>
-        ) : (
+        ) : null}
+        {ctx.events.length > 0 && fromFinanceCalendar ? (
+          <p className="mt-2 text-[10px] text-tos-dim">
+            Economic data:{" "}
+            <a href={FINANCE_CALENDAR_ATTRIBUTION_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-tos-text">
+              FinanceCalendar.com
+            </a>
+          </p>
+        ) : null}
+        {ctx.events.length > 0 ? null : (
           <div className="mt-2 rounded-xl border border-white/[0.06] bg-[#0a0a0d]/90 px-3 py-3">
             <p className="text-sm font-medium text-tos-text">
               {hasCalendarFeed ? "No high-impact events in the next 5 days" : "AXE Calendar is warming"}
@@ -296,6 +307,15 @@ function MacroPoint({ point }: { point: MacroSnapshot["points"][number] }) {
 function EventRow({ event }: { event: EconomicEvent }) {
   const ts = new Date(event.startsAt);
   const date = ts.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  // Released figure first (Finance Calendar), then consensus / prior; nothing invented.
+  const surprise = event.actual != null ? formatSurprise(event.surprise) : null;
+  const figures = [
+    event.actual != null && event.actual !== "" ? `act ${event.actual}${surprise ? ` (${surprise})` : ""}` : null,
+    event.forecast != null && event.forecast !== "" ? `cons ${event.forecast}` : null,
+    event.previous != null && event.previous !== "" ? `prev ${event.previous}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   return (
     <li className="flex items-baseline gap-3 rounded-lg border border-white/[0.05] bg-[#0a0a0d]/90 px-3 py-2">
       <span className="font-mono text-[10px] uppercase tracking-wider text-tos-dim">{date}</span>
@@ -304,6 +324,7 @@ function EventRow({ event }: { event: EconomicEvent }) {
         {event.currency ? (
           <span className="ml-2 font-mono text-[10px] text-tos-dim">{event.currency}</span>
         ) : null}
+        {figures ? <span className="ml-2 font-mono text-[10px] text-tos-dim">{figures}</span> : null}
       </span>
       <ImpactBadge impact={event.impact} />
     </li>

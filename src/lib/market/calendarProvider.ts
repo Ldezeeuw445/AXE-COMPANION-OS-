@@ -3,6 +3,7 @@ import { getFinnhubKey } from "@/lib/market/providerStatus";
 import { getMarketProxyRequest } from "@/lib/market/marketProxyClient";
 import { loadForexFactoryCalendar } from "@/lib/market/forexFactoryCalendar";
 import type { EconomicEvent } from "@/lib/market/marketTypes";
+import { loadSharedEconomicCalendar } from "@/lib/market/sharedEconCalendarLoader";
 
 const REVALIDATE_SECONDS = 60 * 30; // 30 min
 
@@ -143,6 +144,39 @@ export async function loadEconomicCalendar(opts: {
     return impactWeight + currencyMatch;
   };
   return [...events]
+    .sort((a, b) => {
+      const t = Date.parse(a.startsAt) - Date.parse(b.startsAt);
+      if (t !== 0) return t;
+      return score(b) - score(a);
+    })
+    .slice(0, opts.limit ?? 30);
+}
+
+/**
+ * Display calendar for screens, chat context and chart alerts: the shared
+ * Finance Calendar table (actual / consensus / prior / surprise, filled by
+ * Trading OS) first, then exactly loadEconomicCalendar's chain when that table
+ * is empty or stale.
+ *
+ * The auto-trade news guard (tradeGuardService) deliberately keeps calling
+ * loadEconomicCalendar: switching its source is order-path logic and needs
+ * Luka's explicit yes first.
+ */
+export async function loadDisplayEconomicCalendar(opts: {
+  symbol: string;
+  daysAhead?: number;
+  limit?: number;
+}): Promise<EconomicEvent[]> {
+  const days = Math.max(1, Math.min(14, opts.daysAhead ?? 5));
+  const shared = await loadSharedEconomicCalendar(days);
+  if (shared.length === 0) return loadEconomicCalendar(opts);
+  const briefingCurrency = currencyForSymbol(opts.symbol);
+  const score = (e: EconomicEvent): number => {
+    const impactWeight = e.impact === "high" ? 3 : e.impact === "medium" ? 2 : e.impact === "low" ? 1 : 0;
+    const currencyMatch = briefingCurrency && e.currency === briefingCurrency ? 5 : 0;
+    return impactWeight + currencyMatch;
+  };
+  return [...shared]
     .sort((a, b) => {
       const t = Date.parse(a.startsAt) - Date.parse(b.startsAt);
       if (t !== 0) return t;

@@ -3,7 +3,7 @@ import type { MarketContext } from "@/lib/market/marketTypes";
 import { detectProviders } from "@/lib/market/providerStatus";
 import { loadMacroSnapshot } from "@/lib/market/fredProvider";
 import { loadNews } from "@/lib/market/newsProvider";
-import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
+import { loadDisplayEconomicCalendar } from "@/lib/market/calendarProvider";
 import { dedupeSymbols } from "@/lib/market/symbolContext";
 
 /**
@@ -24,7 +24,7 @@ export async function buildMarketContext(args: {
   const [macro, news, events] = await Promise.all([
     loadMacroSnapshot(symbol),
     loadNews({ symbol, watchlist: args.watchlist ?? [], limit: args.newsLimit ?? 12 }),
-    loadEconomicCalendar({ symbol, limit: args.calendarLimit ?? 24 }),
+    loadDisplayEconomicCalendar({ symbol, limit: args.calendarLimit ?? 24 }),
   ]);
 
   const providers = detectProviders();
@@ -60,7 +60,14 @@ export function summarizeMarketContext(ctx: MarketContext): string {
     const high = ctx.events.filter((e) => e.impact === "high").slice(0, 3);
     if (high.length > 0) {
       const evLine = high
-        .map((e) => `${e.title} (${e.currency ?? e.country ?? "?"}) @ ${new Date(e.startsAt).toISOString().slice(0, 16)}Z`)
+        .map((e) => {
+          const at = `${e.title} (${e.currency ?? e.country ?? "?"}) @ ${new Date(e.startsAt).toISOString().slice(0, 16)}Z`;
+          // Released figures (Finance Calendar): actual vs consensus, never invented.
+          if (e.actual != null && e.actual !== "") {
+            return `${at} actual ${e.actual}${e.forecast != null ? ` vs cons ${e.forecast}` : ""}${e.surprise != null ? ` (surprise ${e.surprise})` : ""}`;
+          }
+          return at;
+        })
         .join("; ");
       parts.push(`Upcoming high-impact events: ${evLine}.`);
     }
