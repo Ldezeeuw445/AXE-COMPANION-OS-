@@ -139,6 +139,12 @@ export function amountForBasis(basis: LossBasis | null, amounts: BasisAmounts): 
     day_start_equity: amounts.dayStartEquity,
     trailing_eod_balance: amounts.trailingEodBalance,
     trailing_peak_balance: amounts.trailingPeakBalance,
+    day_start_higher_of_balance_equity: maxOf(amounts.dayStartBalance, amounts.dayStartEquity),
+    // Needs a stated size; without one the room is unknown, not guessed.
+    trailing_peak_from_size:
+      validAccountSize(amounts.accountSize) == null
+        ? null
+        : maxOf(validAccountSize(amounts.accountSize), amounts.trailingPeakBalance),
   };
   const value = byBasis[basis];
   return finite(value) && value > 0 ? value : null;
@@ -171,7 +177,15 @@ function allowanceBaseFor(
     );
   }
   if (basis === "initial_balance") return validAccountSize(amounts.accountSize) ?? basisAmount;
+  if (basis === "trailing_peak_from_size") {
+    return validAccountSize(amounts.accountSize) ?? basisAmount;
+  }
   return basisAmount;
+}
+
+function maxOf(...values: Array<number | null | undefined>): number | null {
+  const known = values.filter((n): n is number => finite(n) && n > 0);
+  return known.length ? Math.max(...known) : null;
 }
 
 function roomFor(

@@ -1,6 +1,18 @@
 /** Parse and normalize AXE morning brief body text for structured UI rendering. */
 
 import type { BriefPriceFactsHighlight } from "@/lib/briefing/priceFacts";
+import type { BriefAccountsHighlight } from "@/lib/briefing/accountsDigest";
+
+/** Stored with the brief: which markets were open, and which ones it covered. */
+export type BriefMarketStatusHighlight = {
+  type: "market_status";
+  checkedAt: string;
+  closedDay: boolean;
+  holiday: string | null;
+  markets: Array<{ symbol: string; open: boolean; reason: string | null; reopensAt: string | null }>;
+  focus: Array<{ symbol: string; priority: string; reasons: string[] }>;
+  drivers: string[];
+};
 
 export type BriefNewsCard = {
   type: "news";
@@ -16,7 +28,9 @@ export type BriefHighlight =
   | { pair?: string; type?: undefined }
   | BriefNewsCard
   | BriefEventChip
-  | BriefPriceFactsHighlight;
+  | BriefPriceFactsHighlight
+  | BriefAccountsHighlight
+  | BriefMarketStatusHighlight;
 
 export type BriefEventChip = {
   type: "event";
@@ -34,7 +48,10 @@ export type BriefSection = {
     | "recent_performance"
     | "alignment"
     | "action_items"
-    | "watch";
+    | "watch"
+    | "market_status"
+    | "accounts"
+    | "week_ahead";
   label?: string;
   paragraphs: string[];
   breaking?: boolean;
@@ -42,6 +59,9 @@ export type BriefSection = {
 };
 
 const SECTION_MARKERS: Array<{ id: BriefSection["id"]; labels: string[] }> = [
+  { id: "market_status", labels: ["MARKET STATUS", "MARKET STATUS:"] },
+  { id: "accounts", labels: ["YOUR ACCOUNTS", "YOUR ACCOUNTS:", "ACCOUNTS"] },
+  { id: "week_ahead", labels: ["WEEK AHEAD", "WEEK AHEAD:", "AT THE REOPEN", "GAP RISK AT THE OPEN"] },
   { id: "market_outlook", labels: ["MARKET OUTLOOK", "MARKET OUTLOOK:"] },
   { id: "news", labels: ["NEWS", "NEWS:", "HEADLINES"] },
   {
@@ -273,6 +293,9 @@ export function sectionDisplayLabel(id: BriefSection["id"]): string | undefined 
   if (id === "alignment") return "Alignment score";
   if (id === "action_items") return "Action items";
   if (id === "watch") return "Watch this session";
+  if (id === "market_status") return "Market status";
+  if (id === "accounts") return "Your accounts";
+  if (id === "week_ahead") return "Week ahead";
   return undefined;
 }
 

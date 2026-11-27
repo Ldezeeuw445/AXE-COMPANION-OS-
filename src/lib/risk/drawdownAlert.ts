@@ -62,6 +62,12 @@ function referenceFor(basis: LossBasis, snap: LiveEquitySnapshot): number | null
     case "trailing_eod_balance":
     case "trailing_peak_balance":
       return positive(snap.peakBalance ?? snap.balance);
+    case "day_start_higher_of_balance_equity":
+      return maxPositive(snap.dayStartBalance, snap.dayStartEquity) ?? positive(snap.balance);
+    case "trailing_peak_from_size": {
+      const size = validAccountSize(snap.accountSize);
+      return size == null ? null : maxPositive(size, snap.peakBalance);
+    }
     default:
       return positive(snap.balance);
   }
@@ -100,7 +106,9 @@ export function readingForKind(
           accountSize: snap.accountSize,
           inferredInitialBalance: snap.initialBalance,
         })
-      : reference;
+      : basis === "trailing_peak_from_size"
+        ? validAccountSize(snap.accountSize)
+        : reference;
   if (base == null) return null;
   const usedPct = (loss / base) * 100;
   if (usedPct < 0) return null;

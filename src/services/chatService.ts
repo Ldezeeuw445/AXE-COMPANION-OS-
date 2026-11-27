@@ -56,6 +56,9 @@ import {
   type ChatSymbolResolution,
 } from "@/lib/chat/resolveChatSymbolContext";
 import { loadChatPriceFacts } from "@/services/chatPriceFacts";
+import { loadAccountDigests, loadWatchlistSymbols } from "@/services/briefInputs";
+import { formatAccountsPromptBlock } from "@/lib/briefing/accountsDigest";
+import { describeMarketStatus, summarizeMarketStatus } from "@/lib/market/marketHours";
 import {
   buildChatPriceFactsPrompt,
   chatPriceStreamNote,
@@ -810,11 +813,18 @@ export async function streamChatMessage(
   // Markets the conversation is about: this message, the chart symbol in
   // force, and the last user turns ("and what about the levels?"). Prefetched
   // symbols come back from the cache.
-  const chatPriceSymbols = detectChatPriceSymbols({
+  let chatPriceSymbols = detectChatPriceSymbols({
     message: trimmed,
     effectiveSymbol,
     recentUserMessages: history.filter((m) => m.role === "user").map((m) => m.content),
   });
+  // An intel question names no market ("what's the flow telling us?"), and
+  // with no symbol there were no PRICE FACTS at all — so AXE Intel answered
+  // "without live pricing, exact levels can't be pinpointed". Price the
+  // trader's own watchlist instead.
+  if (chatPriceSymbols.length === 0 && type === "intel") {
+    chatPriceSymbols = (await loadWatchlistSymbols(supabase, user.id).catch(() => [] as string[])).slice(0, 3);
+  }
   const chatPriceFacts: SymbolFactsResult[] =
     chatPriceSymbols.length > 0
       ? await loadChatPriceFacts(supabase, user.id, chatPriceSymbols).catch(() => [])
@@ -880,6 +890,28 @@ export async function streamChatMessage(
     aiMessages[0] = {
       ...aiMessages[0],
       content: `${String(aiMessages[0].content ?? "")}\n\n${priceFactsPrompt}`,
+    };
+  }
+
+  // Every linked account with the funded-suite numbers, and which of the
+  // markets in play are open. Without this AXE invented its own limits
+  // ("max allowable loss $9,823.33" on a 6%-of-$100k account).
+  if (aiMessages[0]?.role === "system") {
+    const nowTs = new Date();
+    const status = summarizeMarketStatus(chatPriceSymbols.length ? chatPriceSymbols : ["XAUUSD", "BTCUSD"], nowTs);
+    const accountsRes = await loadAccountDigests(supabase, user.id, nowTs, {
+      marketsOpen: !status.tradFiWeekend,
+    }).catch(() => null);
+    const tz = "Europe/Amsterdam";
+    const blocks = [
+      `MARKET STATUS (exchange hours, now):\n${status.statuses.map((st) => `- ${describeMarketStatus(st, tz)}`).join("\n")}\nA CLOSED market gets no "today"/"right now" plan — only "at the reopen".`,
+      accountsRes
+        ? `${formatAccountsPromptBlock(accountsRes.accounts, tz)}\nRisk rule: for daily loss, daily room, max drawdown or "how much can I lose" questions use ONLY these numbers and name the account. Never compute a limit yourself; if a value is missing say it is unknown and why.`
+        : "ACCOUNTS: could not be read right now — say so if asked about account risk; do not estimate.",
+    ];
+    aiMessages[0] = {
+      ...aiMessages[0],
+      content: `${String(aiMessages[0].content ?? "")}\n\n${blocks.join("\n\n")}`,
     };
   }
 

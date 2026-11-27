@@ -113,6 +113,7 @@ export const FREE_ROUTE_REASONS: Record<string, string> = {
   "preferences/alert-armed": "A user preference",
   "preferences/chart-theme": "A user preference",
   "preferences/favorite-workflows": "A user preference",
+  "preferences/brief-focus": "A user preference — which markets your own morning brief covers",
   "preferences/instant-sl-tp-modify": "A user preference",
   "preferences/squawk-stations": "A user preference",
   "preferences/trade-execution": "A user preference",

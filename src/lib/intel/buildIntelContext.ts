@@ -11,7 +11,10 @@ function formatCompact(n: number): string {
 }
 
 /** Structured intel snapshot for LLM correlation / chat context. */
-export function buildIntelContext(intel: IntelSnapshot, symbol?: string): string {
+/** Older than this, a market-tide snapshot is not "the tide". */
+export const TIDE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+export function buildIntelContext(intel: IntelSnapshot, symbol?: string, nowMs: number = Date.now()): string {
   const parts: string[] = [];
 
   if (symbol) parts.push(`Target symbol: ${symbol}\n`);
@@ -52,11 +55,21 @@ export function buildIntelContext(intel: IntelSnapshot, symbol?: string): string
     }
   }
 
+  // Market tide comes from Unusual Whales, paused since 27 Nov 2026. The DB
+  // fallback kept handing the model the last stored snapshot as if it were
+  // live, and AXE Intel cited "market tide" in answers. Only a fresh, dated
+  // snapshot is context; an old one is named as missing.
   if (intel.tide) {
-    parts.push(`\n## MARKET TIDE`);
-    parts.push(`- Net call premium: $${formatCompact(intel.tide.netCallPremium)}`);
-    parts.push(`- Net put premium: $${formatCompact(intel.tide.netPutPremium)}`);
-    parts.push(`- Bias: ${intel.tide.bias}`);
+    const at = Date.parse(String(intel.tide.timestamp ?? ""));
+    const fresh = Number.isFinite(at) && nowMs - at <= TIDE_MAX_AGE_MS;
+    if (fresh) {
+      parts.push(`\n## MARKET TIDE (as of ${new Date(at).toISOString().slice(0, 16)}Z)`);
+      parts.push(`- Net call premium: $${formatCompact(intel.tide.netCallPremium)}`);
+      parts.push(`- Net put premium: $${formatCompact(intel.tide.netPutPremium)}`);
+      parts.push(`- Bias: ${intel.tide.bias}`);
+    } else {
+      parts.push(`\n## MARKET TIDE: no fresh data (source paused or stale) — do not cite market tide.`);
+    }
   }
 
   if (intel.jets.length > 0) {

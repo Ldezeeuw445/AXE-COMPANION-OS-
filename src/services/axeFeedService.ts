@@ -10,6 +10,10 @@ import {
   type SharedNewsFreshness,
 } from "@/lib/market/sharedNewsItems";
 
+import { loadAccountDigests } from "@/services/briefInputs";
+import { formatAccountLines } from "@/lib/briefing/accountsDigest";
+import { summarizeMarketStatus } from "@/lib/market/marketHours";
+
 export { countUnreadFeedItems } from "@/lib/feed/feedUnread";
 
 /** How far back the feed timeline reaches. */
@@ -158,6 +162,30 @@ export async function listAxeFeed(limit = 80): Promise<AxeFeedPayload> {
       createdAt: String(row.created_at ?? row.content_date),
     };
   });
+
+  // The recap is written once for everyone; today's one gets this trader's
+  // accounts added, live and dated, so it covers every linked account — not
+  // only the active one, and not nobody's.
+  const todayAms = new Date().toLocaleDateString("en-CA", { timeZone: "Europe/Amsterdam" });
+  const todaysRecapIdx = (broadcastRes.data ?? []).findIndex(
+    (row) => row.broadcast_type === "market_recap" && String(row.content_date ?? "") === todayAms,
+  );
+  if (todaysRecapIdx !== -1) {
+    try {
+      const now = new Date();
+      const fx = summarizeMarketStatus(["EURUSD"], now);
+      const { accounts } = await loadAccountDigests(authed.supabase, authed.user.id, now, { marketsOpen: fx.closed.length === 0 });
+      const tz = "Europe/Amsterdam";
+      const lines = formatAccountLines(accounts, tz);
+      if (lines.length > 0) {
+        const stamp = now.toLocaleString("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+        const target = broadcasts[todaysRecapIdx];
+        if (target) target.body = `${target.body}\n\nYOUR ACCOUNTS (live, ${stamp})\n${lines.join("\n")}`;
+      }
+    } catch (err) {
+      console.warn("[feed] recap accounts unavailable:", err instanceof Error ? err.message : err);
+    }
+  }
 
   const sharedHeadlines: AxeFeedItem[] = sharedNews.items
     .filter((item) => Date.parse(item.publishedAt) >= sinceMs)

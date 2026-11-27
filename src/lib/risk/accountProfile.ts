@@ -14,6 +14,8 @@
  * Dependency-free so it can be exercised with `node --experimental-strip-types`.
  */
 
+import { SHARED_PROP_PROGRAMS } from "./sharedPropPrograms";
+
 export type AccountKind = "live" | "demo" | "prop_evaluation" | "prop_funded" | "unknown";
 
 /**
@@ -42,7 +44,19 @@ export type LossBasis =
   /** Trails the highest end-of-day balance, never downward. */
   | "trailing_eod_balance"
   /** Trails the highest balance reached at any point, updated as trades close. */
-  | "trailing_peak_balance";
+  | "trailing_peak_balance"
+  /**
+   * Upcomers daily rule: measured from the HIGHER of balance and equity at the
+   * day's reset, the percentage is of the account size (Trading OS
+   * `dailyAnchor: higher_of_balance_equity`).
+   */
+  | "day_start_higher_of_balance_equity"
+  /**
+   * Upcomers trailing max drawdown: measured from the higher of the account
+   * size and the highest balance reached, the percentage is of the account
+   * size (Trading OS `maxKind: trailing`, high-water mark never below size).
+   */
+  | "trailing_peak_from_size";
 
 export type TradingConstraints = {
   /** False when the account's rules forbid holding through high-impact news. */
@@ -179,6 +193,50 @@ export type DetectedFirm = {
   unresolvedModels: string[];
 };
 
+/**
+ * Upcomers Thunderbolt (1 step), from the shared Trading OS prop catalog
+ * (`upcomers-thunderbolt-challenge`), so the guard and the funded suite read
+ * the same rulebook: 3% daily from the higher of balance/equity at the reset
+ * (00:00 UTC), 6% trailing maximum drawdown, both of the account size.
+ * Challenge and Funded carry the same two limits in the catalog.
+ *
+ * Picked by "thunderbolt" or "1 step" in the label, server or the model the
+ * trader chose — the firm itself still only comes from label/server.
+ *
+ * The guard anchors the day on the broker-day snapshot (Upcomers' MT5 day,
+ * 22:00 UTC), the same snapshot the Trading OS funded suite reads.
+ */
+function upcomersThunderbolt(): FirmRuleSet {
+  const p = SHARED_PROP_PROGRAMS["upcomers-thunderbolt-challenge"];
+  const funded = SHARED_PROP_PROGRAMS["upcomers-thunderbolt-funded"];
+  const same =
+    p != null &&
+    funded != null &&
+    p.dailyPct === funded.dailyPct &&
+    p.maxPct === funded.maxPct &&
+    p.dailyAnchor === "higher_of_balance_equity" &&
+    p.maxKind === "trailing";
+  return {
+    model: "Thunderbolt",
+    modelPatterns: /\bthunder\s*bolt|\b1\s*-?\s*step|\bone\s*step/i,
+    // Fail closed if the catalog ever stops agreeing: no number beats a wrong one,
+    // and an unknown limit blocks automatic trades.
+    maxDailyLossPct: same ? p.dailyPct : null,
+    maxDailyLossBasis: same ? "day_start_higher_of_balance_equity" : null,
+    maxTotalLossPct: same ? p.maxPct : null,
+    maxTotalLossBasis: same ? "trailing_peak_from_size" : null,
+    // Trading OS catalog: news trading and weekend holding verified allowed on
+    // Upcomers CFD programs (program-differences page).
+    newsTradingAllowed: true,
+    weekendHoldingAllowed: true,
+    maxLot: null,
+    source:
+      "https://help.upcomers.com/en/articles/12983894-thunderbolt-challenge-cfd-complete-rules-overview — Thunderbolt (1 step): 3% daily from the higher of balance/equity at 00:00 UTC, 6% trailing max drawdown (Trading OS catalog " +
+      "2026-11-04.1)",
+    asOf: "2026-11-04",
+  };
+}
+
 export const FIRMS: FirmDefinition[] = [
   {
     id: "ftmo",
@@ -248,6 +306,7 @@ export const FIRMS: FirmDefinition[] = [
         source: "https://help.upcomers.com — Oracle: 4% daily from the day's starting equity; news and weekend holding allowed",
         asOf: "2026-10-19",
       },
+      upcomersThunderbolt(),
     ],
   },
 
@@ -657,6 +716,10 @@ export function basisNote(basis: LossBasis | null): string {
       return " trailing your best end-of-day balance";
     case "trailing_peak_balance":
       return " trailing your highest balance";
+    case "day_start_higher_of_balance_equity":
+      return " of the account size, from the higher of balance and equity at the day's reset";
+    case "trailing_peak_from_size":
+      return " of the account size, trailing your highest balance";
     default:
       return "";
   }
