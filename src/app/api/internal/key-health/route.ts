@@ -184,9 +184,9 @@ function vercelChecks(): Array<Promise<Check>> {
       { headers: { Authorization: `Bearer ${stripe}` } },
     ),
     ...stripePrices,
-    // Optional since INTEL-FREE: unsubscribed is not missing, so it is only
-    // checked once switched on or once a key is actually set.
-    ...(uw || isSourceAvailable("unusual_whales", process.env)
+    // Unusual Whales is paused unless UNUSUAL_WHALES_ENABLED=true. A leftover
+    // key in env must not trigger a live 401 while the subscription is off.
+    ...(isSourceAvailable("unusual_whales", process.env)
       ? [
           httpCheck(
             { name: "Unusual Whales (optional)", area: "intel", env: ["UNUSUAL_WHALES_ENABLED", "UNUSUAL_WHALES_TOKEN"] },

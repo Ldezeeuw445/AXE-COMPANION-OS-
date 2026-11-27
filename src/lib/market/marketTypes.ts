@@ -11,7 +11,7 @@ export type ProviderId =
   | "unusualWhales"
   | "demo";
 
-export type ProviderState = "live" | "missing_config" | "demo" | "error";
+export type ProviderState = "live" | "missing_config" | "demo" | "error" | "paused";
 
 export type ProviderStatus = {
   id: ProviderId;

@@ -78,8 +78,9 @@ export async function GET() {
         "ALPACA_API_KEY_ID",
         "ALPACA_API_KEY",
       ) !== null,
-    unusual_whales_set:
-      firstNonEmptyEnv("UNUSUAL_WHALES_TOKEN", "UNUSUAL_WHALES_API_KEY") !== null,
+    unusual_whales_enabled: (process.env.UNUSUAL_WHALES_ENABLED ?? "").trim().toLowerCase() === "true",
+    unusual_whales_status:
+      (process.env.UNUSUAL_WHALES_ENABLED ?? "").trim().toLowerCase() === "true" ? "enabled" : "paused",
     openai_key_set: firstNonEmptyEnv("OPENAI_API_KEY", "OPEN_AI_API_KEY") !== null,
     ollama_configured: firstNonEmptyEnv("OLLAMA_URL", "OLLAMA_HOST") !== null,
 
