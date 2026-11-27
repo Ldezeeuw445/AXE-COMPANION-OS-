@@ -56,7 +56,10 @@ check("an Upcomers account is never read as 'unknown'", () => {
     // a prop account nobody had read the rulebook of. We have read this one:
     // Upcomers allows both. What must never come back is "no limit at all".
     assert.ok(p.maxDailyLossPct !== null, "a prop account must have a daily loss limit");
-    assert.equal(p.maxDailyLossPct, 4, "and for Upcomers it is their 4%, not the generic 5%");
+    // Oracle named: its 4%. No model named: the tightest Upcomers model
+    // (Thunderbolt, 3%) — never the generic 5%.
+    const expected = /oracle/i.test(label) ? 4 : 3;
+    assert.equal(p.maxDailyLossPct, expected, "and for Upcomers it is their own limit, not the generic 5%");
   }
 });
 

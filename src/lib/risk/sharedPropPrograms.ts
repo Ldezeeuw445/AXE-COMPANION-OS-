@@ -11,8 +11,8 @@
  * suite uses. Regenerate with scripts/sync-shared-prop-programs.mjs after the
  * catalog changes — the parity test pins the Upcomers/FTMO rows.
  *
- * Display / brief / chat only. The order guard (accountProfile.ts) is not
- * wired to this table.
+ * Used by the brief, chat and display, and by the guard's Upcomers
+ * Thunderbolt rules in accountProfile.ts (limits only).
  */
 
 export type SharedPropProgram = {

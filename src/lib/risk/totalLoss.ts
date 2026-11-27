@@ -108,6 +108,14 @@ export function totalLossFrame(
     case "trailing_eod_balance":
     case "trailing_peak_balance":
       return peak == null ? null : { reference: peak, base: peak, phrase: "from the highest balance" };
+    case "trailing_peak_from_size": {
+      // Trading OS: high-water mark = max(account size, highs); limit = % of size.
+      // Only a stated size: the first balance AXE saw is a hint, and on an
+      // account connected below its size it would loosen the limit.
+      const base = size;
+      if (base == null) return null;
+      return { reference: Math.max(base, peak ?? 0), base, phrase: "from the higher of the account size and the highest balance" };
+    }
     default:
       // No basis, or day_start_* (not a total-loss basis).
       return null;
