@@ -2,6 +2,8 @@ import "server-only";
 import { buildMarketContext } from "@/lib/market/marketContextService";
 import { callLLM } from "@/services/llmClient";
 import type { MarketContext } from "@/lib/market/marketTypes";
+import { describeMarketStatus, summarizeMarketStatus, type MarketStatusSummary } from "@/lib/market/marketHours";
+import { findClosedMarketViolations } from "@/lib/briefing/briefContentGuard";
 
 /**
  * Broadcast feed copy, written from this app's own market data.
@@ -37,30 +39,70 @@ add a figure, a cause or a conclusion the headline does not state.
 Never address anyone by name — this goes to all users. No trade advice, no
 entries, no targets. Direct, factual, confident.`;
 
-function dailyNewsPrompt(data: string): string {
+/** True when FX / metals / indices are shut (weekend or a full holiday) — crypto only. */
+export function broadcastClosedDay(status: MarketStatusSummary): boolean {
+  const nonCrypto = status.statuses.filter((s) => s.assetClass !== "crypto");
+  return status.tradFiWeekend || (nonCrypto.length > 0 && nonCrypto.every((s) => !s.open && s.reason === "holiday"));
+}
+
+const CLOSED_RULES = `MARKET STATUS rules (hard): a market marked CLOSED gets no "today", no
+"this session", no "watch it now". Frame it only as closed / last close /
+what to expect at the reopen (time in MARKET STATUS) / week ahead. Only
+markets marked OPEN — on a weekend that is crypto — can have a today line.`;
+
+export function dailyNewsPrompt(data: string, closedDay = false): string {
+  if (closedDay) {
+    return `Write today's brief from the DATA block below. FX, metals and indices are CLOSED (see MARKET STATUS); crypto is the only market trading.
+
+Format: 3-5 short bullets, max 180 words: first what is open (crypto), then the
+week ahead for the closed markets. End with one line starting "At the reopen:"
+naming the reopen time and the dated calendar events of the coming week.
+
+${CLOSED_RULES}
+
+DATA
+${data}`;
+  }
   return `Write today's trading brief from the DATA block below.
 
 Format: 3-6 short bullets, max 180 words, then one final line starting
 "Watch today:" naming what the calendar actually shows. If the DATA block has no
 events, make that final line about the macro readings instead.
 
+${CLOSED_RULES}
+
 DATA
 ${data}`;
 }
 
-function marketRecapPrompt(data: string): string {
+export function marketRecapPrompt(data: string, closedDay = false): string {
+  if (closedDay) {
+    return `Write today's recap from the DATA block below. FX, metals and indices did not trade today (see MARKET STATUS) — do not describe a session for them.
+
+Format: short bullets, max 160 words: crypto, then what changed for the week
+ahead. Close with one line "At the reopen:" with the reopen time from MARKET
+STATUS and the dated events of the coming week.
+
+${CLOSED_RULES}
+
+DATA
+${data}`;
+  }
   return `Write the end-of-day recap from the DATA block below.
 
 Format: short bullets, max 200 words, then one closing line
 "What to watch tomorrow." drawn from the calendar in the DATA block.
+
+${CLOSED_RULES}
 
 DATA
 ${data}`;
 }
 
 /** Facts only — every line traces back to a provider response. */
-function formatDataBlock(contexts: MarketContext[]): { text: string; hasData: boolean } {
+export function formatDataBlock(contexts: MarketContext[], status?: MarketStatusSummary): { text: string; hasData: boolean } {
   const lines: string[] = [];
+  const statusLines = status ? status.statuses.map((s) => `- ${describeMarketStatus(s, "Europe/Amsterdam")}`) : [];
   const seenHeadlines = new Set<string>();
   const seenEvents = new Set<string>();
 
@@ -96,7 +138,11 @@ function formatDataBlock(contexts: MarketContext[]): { text: string; hasData: bo
   }
   if (headlines.length > 0) lines.push("", "HEADLINES", ...headlines.slice(0, 14));
 
-  return { text: lines.join("\n"), hasData: lines.length > 0 };
+  const hasData = lines.length > 0;
+  if (statusLines.length > 0) {
+    lines.unshift("MARKET STATUS (exchange hours, computed now)", ...statusLines, ...(status?.holiday ? [`- Holiday: ${status.holiday}`] : []), "");
+  }
+  return { text: lines.join("\n"), hasData };
 }
 
 /**
@@ -114,22 +160,25 @@ function ungroundedNumbers(body: string, data: string): string[] {
 }
 
 /** Facts with no model in the loop — the fallback when a draft cannot be trusted. */
-function renderDeterministicBroadcast(kind: BroadcastKind, data: string): string {
-  const closing =
-    kind === "daily_news"
+export function renderDeterministicBroadcast(kind: BroadcastKind, data: string, closedDay = false): string {
+  const closing = closedDay
+    ? "At the reopen: the calendar entries listed above. Until then only crypto is trading."
+    : kind === "daily_news"
       ? "Watch today: the calendar entries listed above."
       : "What to watch tomorrow: the calendar entries listed above.";
   return `${data}\n\n${closing}`;
 }
 
-export async function generateBroadcastLocally(kind: BroadcastKind): Promise<string> {
+export async function generateBroadcastLocally(kind: BroadcastKind, now: Date = new Date()): Promise<string> {
+  const status = summarizeMarketStatus(BROADCAST_SYMBOLS, now);
+  const closedDay = broadcastClosedDay(status);
   const contexts = await Promise.all(
     BROADCAST_SYMBOLS.map((symbol) =>
       buildMarketContext({ symbol, newsLimit: 6, calendarLimit: 12 }).catch(() => null),
     ),
   );
   const usable = contexts.filter((c): c is MarketContext => c != null);
-  const { text, hasData } = formatDataBlock(usable);
+  const { text, hasData } = formatDataBlock(usable, status);
 
   if (!hasData) {
     const missing = (usable[0]?.providers ?? [])
@@ -141,7 +190,7 @@ export async function generateBroadcastLocally(kind: BroadcastKind): Promise<str
     );
   }
 
-  const prompt = kind === "daily_news" ? dailyNewsPrompt(text) : marketRecapPrompt(text);
+  const prompt = kind === "daily_news" ? dailyNewsPrompt(text, closedDay) : marketRecapPrompt(text, closedDay);
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const response = await callLLM(
@@ -153,7 +202,7 @@ export async function generateBroadcastLocally(kind: BroadcastKind): Promise<str
             content:
               attempt === 0
                 ? prompt
-                : `${prompt}\n\nYour previous draft used figures that are not in the DATA block. Rewrite it using only numbers that appear above, verbatim.`,
+                : `${prompt}\n\nYour previous draft used figures that are not in the DATA block, or told readers to act today on a market that MARKET STATUS marks CLOSED. Rewrite it using only numbers that appear above, verbatim, and frame closed markets only as "at the reopen".`,
           },
         ],
         temperature: 0.2,
@@ -168,12 +217,16 @@ export async function generateBroadcastLocally(kind: BroadcastKind): Promise<str
     }
 
     const ungrounded = ungroundedNumbers(body, text);
-    if (ungrounded.length === 0) return body;
-    console.warn(
-      `[broadcast] ${kind} draft ${attempt + 1} used ungrounded figures: ${ungrounded.join(", ")}`,
-    );
+    const closedHits = findClosedMarketViolations(body, status);
+    if (ungrounded.length === 0 && closedHits.length === 0) return body;
+    if (ungrounded.length > 0) {
+      console.warn(`[broadcast] ${kind} draft ${attempt + 1} used ungrounded figures: ${ungrounded.join(", ")}`);
+    }
+    if (closedHits.length > 0) {
+      console.warn(`[broadcast] ${kind} draft ${attempt + 1} told readers to act on closed markets: ${closedHits.map((h) => h.symbol).join(", ")}`);
+    }
   }
 
   console.warn(`[broadcast] ${kind} falling back to the data block verbatim (last draft rejected)`);
-  return renderDeterministicBroadcast(kind, text);
+  return renderDeterministicBroadcast(kind, text, closedDay);
 }

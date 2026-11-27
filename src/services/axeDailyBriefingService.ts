@@ -47,6 +47,39 @@ import type { MarketContext } from "@/lib/market/marketTypes";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { filterUsersWithFeature } from "@/services/entitledUsers";
 import { runBatchWithinBudget } from "@/lib/briefing/cronBudget";
+import {
+  summarizeMarketStatus,
+  type MarketStatusSummary,
+} from "@/lib/market/marketHours";
+import {
+  describeFocusForPrompt,
+  isEventInFocus,
+  isHeadlineInFocus,
+  normalizeBriefFocusPrefs,
+  resolveBriefFocus,
+  type BriefFocus,
+} from "@/lib/briefing/briefFocus";
+import {
+  formatAccountsPromptBlock,
+  toAccountsHighlight,
+  type AccountDigest,
+} from "@/lib/briefing/accountsDigest";
+import {
+  describeContentViolations,
+  stripContentViolations,
+  validateBriefContent,
+} from "@/lib/briefing/briefContentGuard";
+import { loadAccountDigests, loadBriefFocusPrefs, loadWatchlistSymbols } from "@/services/briefInputs";
+import {
+  BRIEF_SECTION_HEADERS,
+  briefIsClosedMarketDay,
+  briefPriceSymbols,
+  marketStatusLines,
+  normalizeBriefHeader,
+  withServerSections,
+} from "@/lib/briefing/briefSections";
+
+export { briefPriceSymbols, briefIsClosedMarketDay, withServerSections };
 
 // ─── Timezone helpers ─────────────────────────────────────────────────────────
 
@@ -129,7 +162,17 @@ export interface TraderBriefingContext {
   traderId: string;
   name: string;
   timezone: string;
+  /**
+   * The markets this brief may cover — `focus.markets`, in order. Kept as a
+   * plain list for the callers that only need symbols.
+   */
   preferredPairs: string[];
+  /** Chosen markets + labelled drivers + the currencies whose events matter. */
+  focus: BriefFocus;
+  /** Open / closed per focus market at generation time. */
+  marketStatus: MarketStatusSummary;
+  /** Every linked account, with the same numbers as the TOS funded suite. */
+  accounts: AccountDigest[];
   /**
    * 0–100 from the latest cockpit snapshot, or null when AXE has never scored
    * this trader. It used to default to 50, which the prompt then handed the
@@ -163,22 +206,6 @@ export interface TraderBriefingContext {
     tier: "low" | "medium" | "high";
     gateMode: "strict" | "guided" | "proactive";
   };
-}
-
-const BRIEF_SECTION_HEADERS = new Set([
-  "MARKET OUTLOOK",
-  "NEWS",
-  "RECENT PERFORMANCE",
-  "ALIGNMENT SCORE",
-  "ACTION ITEMS",
-  "WATCH THIS SESSION",
-  "SESSION WATCH",
-  "SESSION FOCUS",
-  "TODAY'S WATCH",
-]);
-
-function normalizeBriefHeader(line: string): string {
-  return line.trim().replace(/:+$/, "").toUpperCase();
 }
 
 /**
@@ -282,14 +309,32 @@ async function fetchProfileDirect(supabase: SupabaseClient, userId: string): Pro
 export async function buildBriefingContext(
   supabase: SupabaseClient,
   traderId: string,
-  options?: { weekly?: boolean },
+  options?: { weekly?: boolean; now?: Date },
 ): Promise<TraderBriefingContext> {
+  const now = options?.now ?? new Date();
   try {
-    const [profile, arc, chartSetup] = await Promise.all([
+    const [profile, arc, chartSetup, watchlist, focusPrefs] = await Promise.all([
       fetchProfileDirect(supabase, traderId),
       getTraderLearningArc(traderId, supabase),
       getChartSetup(supabase, traderId),
+      loadWatchlistSymbols(supabase, traderId).catch(() => [] as string[]),
+      loadBriefFocusPrefs(supabase, traderId).catch(() => null),
     ]);
+    const tradFi = summarizeMarketStatus(["EURUSD"], now);
+    const tradFiClosed = tradFi.closed.length > 0 && (tradFi.tradFiWeekend || tradFi.statuses[0]?.reason === "holiday");
+    const accountsRes = await loadAccountDigests(supabase, traderId, now, { marketsOpen: !tradFiClosed }).catch(() => ({
+      accounts: [] as AccountDigest[],
+      positions: [],
+      error: "accounts read failed",
+    }));
+    const focus = resolveBriefFocus({
+      prefs: focusPrefs ?? normalizeBriefFocusPrefs(null),
+      watchlist,
+      traded: arc.topPairs.slice(0, 3).map((pair) => pair.symbol),
+      openPositions: accountsRes.positions.map((p) => p.symbol),
+      tradFiClosed,
+    });
+    const marketStatus = summarizeMarketStatus(focus.markets.map((m) => m.symbol), now);
     const engineProfile = await getAxeEngineProfile(supabase, traderId, {
       source: "briefing_context",
     }).catch(() => null);
@@ -326,7 +371,10 @@ export async function buildBriefingContext(
       traderId,
       name: profile.displayName,
       timezone: profile.timezone,
-      preferredPairs: arc.topPairs.slice(0, 3).map((pair) => pair.symbol),
+      preferredPairs: focus.markets.map((m) => m.symbol),
+      focus,
+      marketStatus,
+      accounts: accountsRes.accounts,
       alignment: arc.alignmentScore,
       periodPerformance,
       chartSetup,
@@ -348,6 +396,9 @@ export async function buildBriefingContext(
       name: "Trader",
       timezone: "Europe/Amsterdam",
       preferredPairs: [],
+      focus: { markets: [], drivers: [], excluded: [], currencies: [], mode: "auto" },
+      marketStatus: summarizeMarketStatus([], now),
+      accounts: [],
       alignment: null,
       periodPerformance: {
         since: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
@@ -413,7 +464,18 @@ function describeChartSetup(setup: ChartSetupSummary): string {
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────
 
+function marketStatusPromptBlock(context: TraderBriefingContext): string {
+  const lines = marketStatusLines(context);
+  if (lines.length === 0) return "";
+  const hol = context.marketStatus.holiday ? `\nHoliday today: ${context.marketStatus.holiday}.` : "";
+  return `\n\nMARKET STATUS (computed from exchange hours right now — hard facts):\n${lines.map((l) => `- ${l}`).join("\n")}${hol}
+Market-hours rules (hard — a server check rejects the brief otherwise):
+- A market marked CLOSED gets NO "watch/monitor/trade it today", no "this session", no entries. You may only frame it as: closed, last close, what to expect at the reopen (time given above), weekend gap risk, or the week ahead.
+- Only markets marked OPEN can have a "today" plan.`;
+}
+
 function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?: boolean }): string {
+  const closedDay = briefIsClosedMarketDay(context);
   const timeStr = new Date().toLocaleString("en-US", {
     timeZone: context.timezone,
     hour: "numeric",
@@ -422,7 +484,6 @@ function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?
     weekday: "long",
   });
 
-  const hasPairs = context.preferredPairs.length > 0;
   const hasPeriodTrades = context.periodPerformance.trades.length > 0;
   const isWeekly = options?.weekly ?? false;
   const hasAlignment = context.alignment !== null;
@@ -431,7 +492,7 @@ function buildBriefingPrompt(context: TraderBriefingContext, options?: { weekly?
 
 Key facts:
 - Their local time: ${timeStr} (${context.timezone})
-- Top pairs: ${hasPairs ? context.preferredPairs.join(", ") : "not yet identified — be encouraging, and do not name pairs as if they were theirs"}
+- ${describeFocusForPrompt(context.focus).replace(/\n/g, "\n  ")}
 - AXE alignment score: ${hasAlignment ? `${context.alignment}% (how well AXE has learned this trader's style)` : "not scored yet — AXE has taken no snapshot of this trader. Do not state or imply a number."}
 - AXE engine confidence: ${context.engineConfidence.score}/100 (${context.engineConfidence.tier}, gate: ${context.engineConfidence.gateMode})
 - Session open as this is written: ${context.liveSession}
@@ -450,12 +511,16 @@ Key facts:
     prompt += formatPeriodPerformanceForPrompt(context.periodPerformance);
   }
 
+  prompt += marketStatusPromptBlock(context);
+  prompt += `\n\n${formatAccountsPromptBlock(context.accounts, context.timezone)}
+Account rules: the server prints a YOUR ACCOUNTS section with these exact numbers — do not write that section yourself and never compute a limit, room or drawdown of your own. You may refer to one account by name and its room when it matters for an action item.`;
+
   if (isWeekly) {
     prompt += `
 
 Write a weekly outlook that:
 1. Opens with a greeting that uses ${context.name}'s name and frames the week ahead
-2. Covers their markets for the week using ONLY the PRICE FACTS levels (this week's and last week's high/low, 20-day range) and the dated calendar events and headlines below — no setups or levels from memory
+2. Covers ONLY their markets listed above for the week (closed ones as "at the reopen"), using ONLY the PRICE FACTS levels (this week's and last week's high/low, 20-day range) and the dated calendar events and headlines below — no setups or levels from memory
 3. ${hasAlignment ? "May mention their alignment score once, as the number given above" : "Does not mention an alignment score — AXE has none for them yet"}; never mention their plan, tier or subscription
 4. Includes one tactical insight tied to ${context.sessionHistory ? `the ${context.sessionHistory.session} session they trade` : "their recent winners"}
 5. Ends with the single most important thing to watch this week
@@ -467,14 +532,27 @@ Length: 200-280 words maximum.`;
       ? `the weather at your location is ${context.weather.summary}, ${context.weather.tempC}°C`
       : "the weather at your location is unavailable";
 
+    const openMarkets = context.marketStatus.open;
+    const outlookBlock = closedDay
+      ? `MARKET OUTLOOK
+[${
+          openMarkets.length
+            ? `1-2 sentences on ${openMarkets.join(", ")} — the only market(s) open right now. Say plainly that their other markets are closed.`
+            : "One sentence: all of their markets are closed right now, and when they reopen (from MARKET STATUS)."
+        }]
+
+WEEK AHEAD
+[2-3 sentences: what to prepare for when their closed markets reopen — last close, weekend gap risk, and the dated high-impact events of the coming week from the calendar data. No "today" plan for a closed market.]`
+      : `MARKET OUTLOOK
+[2-3 sentences on session setup for their markets that are OPEN — mention symbols like XAUUSD as plain text, not markdown. A market marked CLOSED gets at most "closed, reopens …".]`;
+
     prompt += `
 
 Write a morning brief using EXACTLY this plain-text structure (no markdown, no ** or # symbols):
 
 Good morning ${context.name}, ${weatherLine}.
 
-MARKET OUTLOOK
-[2-3 sentences on session setup for their top pairs — mention pair symbols like XAUUSD as plain text, not markdown]
+${outlookBlock}
 
 NEWS
 [Today's agenda: lead with scheduled economic events from the calendar data below. 1-2 sentences on what matters for their pairs today. If a major headline is provided, summarize it in plain language — never paste URLs or filing titles. Omit this section only if the calendar is quiet AND no relevant headlines exist.]
@@ -490,20 +568,30 @@ ALIGNMENT SCORE
     } Do NOT repeat the words "Alignment score" in this sentence.]
 
 ACTION ITEMS
-[2-4 numbered tactical points for today — plain numbers like 1. 2. 3., no markdown]
-
+[${
+      closedDay
+        ? "2-3 numbered prep points for the reopen (levels to mark from PRICE FACTS, events to note, risk to size) — nothing to execute on a closed market"
+        : "2-4 numbered tactical points for today on OPEN markets only — plain numbers like 1. 2. 3., no markdown"
+    }]
+${
+      closedDay
+        ? ""
+        : `
 WATCH THIS SESSION
-[One clear tactical watch item for today's session]
-
+[One clear tactical watch item for today's session, on an OPEN market]
+`
+    }
 Rules:
 - Do NOT use **, __, #, bullet lists, or URLs
-- Section headers on their own line — exactly: MARKET OUTLOOK, NEWS, RECENT PERFORMANCE, ALIGNMENT SCORE, ACTION ITEMS, WATCH THIS SESSION
+- Section headers on their own line — exactly: ${closedDay ? "MARKET OUTLOOK, WEEK AHEAD, NEWS, RECENT PERFORMANCE, ALIGNMENT SCORE, ACTION ITEMS" : "MARKET OUTLOOK, NEWS, RECENT PERFORMANCE, ALIGNMENT SCORE, ACTION ITEMS, WATCH THIS SESSION"}
+- Do not write MARKET STATUS or YOUR ACCOUNTS — the server adds them
+- Name only the markets listed under "Their markets" (and labelled drivers); calendar events in other currencies are not theirs
 - Never repeat a section header inside the body text under that section
 - Omit RECENT PERFORMANCE entirely if no closed trades were provided above
 - Use ONLY calendar events and headlines from the market context below — never invent news
 - Never mention their plan, tier or subscription
 - Ignore SEC filings, Form 8.3, fund disclosure PR — not useful for traders
-- Mention trading pairs by ticker (XAUUSD, BTCUSD, etc.)
+- Mention their markets by ticker (e.g. ${context.preferredPairs.slice(0, 2).join(", ") || "XAUUSD"})
 - Closed trades come from History — never call them Quotes; open positions live under Trade
 - Write so the trader knows what to expect today without clicking links
 
@@ -535,12 +623,19 @@ async function appendMarketContextToPrompt(
 ): Promise<{ prompt: string; marketCtx: MarketContext | null }> {
   const primaryPair = context.preferredPairs[0] ?? "XAUUSD";
   try {
-    const marketCtx = await buildMarketContext({
+    const rawCtx = await buildMarketContext({
       symbol: primaryPair,
       watchlist: context.preferredPairs,
       newsLimit: 6,
-      calendarLimit: 8,
+      calendarLimit: 16,
     });
+    // Calendar events in a currency none of their markets trade in are not
+    // their news: this is how AUD CPI became "today's agenda" for a gold trader.
+    const marketCtx: MarketContext = {
+      ...rawCtx,
+      events: rawCtx.events.filter((e) => isEventInFocus(e.currency ?? e.country, context.focus)),
+      news: rawCtx.news.filter((n) => isHeadlineInFocus(n.title, n.summary, context.focus)),
+    };
     const summary = summarizeBriefMarketContext(marketCtx, context.timezone, { weekly });
     if (summary.trim()) {
       return {
@@ -556,17 +651,6 @@ async function appendMarketContextToPrompt(
     prompt: `${prompt}\n\nMarket context: the news and calendar feed is unavailable right now — say so and do not name any event or headline.`,
     marketCtx: null,
   };
-}
-
-/** The markets a brief may talk about: their top pairs, plus gold and bitcoin (the ones AXE gets asked about most). */
-export function briefPriceSymbols(preferredPairs: string[]): string[] {
-  const out: string[] = [];
-  for (const s of [...preferredPairs.slice(0, 2), "XAUUSD", "BTCUSD", ...preferredPairs.slice(2)]) {
-    const up = s.trim().toUpperCase();
-    if (up && !out.includes(up)) out.push(up);
-    if (out.length >= 4) break;
-  }
-  return out;
 }
 
 /** Text that is honest when there is no live price at all. */
@@ -694,6 +778,32 @@ export async function generateMorningBrief(
     console.warn(`[Briefing] stripping ${violations.length} invented price sentence(s) for ${traderId}`);
     response = { ...response, content: stripViolatingSentences(response.content ?? "", violations) };
   }
+  // Market hours + focus: one regenerate with the violations named, then cut.
+  const contentCtx = { status: context.marketStatus, focus: context.focus };
+  let contentViolations = validateBriefContent(response.content ?? "", contentCtx);
+  if (contentViolations.length > 0) {
+    console.warn(`[Briefing] ${contentViolations.length} market-hours/focus violation(s) for ${traderId} — regenerating`);
+    const retry = await callLLM(
+      {
+        ...llmRequest,
+        temperature: 0.3,
+        messages: [
+          ...llmRequest.messages,
+          { role: "assistant", content: response.content ?? "" },
+          { role: "user", content: describeContentViolations(contentViolations) },
+        ],
+      },
+      "briefing",
+    ).catch(() => null);
+    if (retry?.content && findPriceViolations(retry.content, priceFacts).length === 0) {
+      response = retry;
+      contentViolations = validateBriefContent(retry.content, contentCtx);
+    }
+  }
+  if (contentViolations.length > 0) {
+    console.warn(`[Briefing] stripping ${contentViolations.length} market-hours/focus sentence(s) for ${traderId}`);
+    response = { ...response, content: stripContentViolations(response.content ?? "", contentViolations) };
+  }
   const noDataNote = noPriceDataNote(priceFacts);
   if (noDataNote && !/unavailable/i.test(response.content ?? "")) {
     response = { ...response, content: `${noDataNote}\n\n${response.content ?? ""}` };
@@ -704,15 +814,18 @@ export async function generateMorningBrief(
     `[Briefing] Generated for ${traderId} in ${latency_ms}ms via ${response.provider}`
   );
 
-  const briefText = syncBriefAlignmentSection(
-    (response.content ?? "")
-    .replace(/\*\*/g, "")
-    .replace(/\bon\s+quote\b/gi, "from History")
-    .replace(/\bquotes?\s+tab\b/gi, "History")
-    .replace(/https?:\/\/\S+/g, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim(),
-    context.alignment,
+  const briefText = withServerSections(
+    syncBriefAlignmentSection(
+      (response.content ?? "")
+      .replace(/\*\*/g, "")
+      .replace(/\bon\s+quote\b/gi, "from History")
+      .replace(/\bquotes?\s+tab\b/gi, "History")
+      .replace(/https?:\/\/\S+/g, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
+      context.alignment,
+    ),
+    context,
   );
 
   const highlightRows: BriefHighlight[] = [
@@ -720,6 +833,21 @@ export async function generateMorningBrief(
       ? buildBriefHighlights(marketCtx, context.timezone, context.preferredPairs)
       : context.preferredPairs.map((p) => ({ pair: p }))),
     toPriceFactsHighlight(priceFacts, factsAt),
+    toAccountsHighlight(context.accounts, factsAt),
+    {
+      type: "market_status",
+      checkedAt: factsAt.toISOString(),
+      closedDay: briefIsClosedMarketDay(context),
+      holiday: context.marketStatus.holiday,
+      markets: context.marketStatus.statuses.map((st) => ({
+        symbol: st.symbol,
+        open: st.open,
+        reason: st.reason,
+        reopensAt: st.reopensAt,
+      })),
+      focus: context.focus.markets.map((m) => ({ symbol: m.symbol, priority: m.priority, reasons: m.reasons })),
+      drivers: context.focus.drivers.map((d) => d.symbol),
+    },
   ];
 
   // Save to axe_daily_briefings (upsert by user_id + date + type)

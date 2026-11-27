@@ -20,6 +20,10 @@ import type { LLMRequest } from "@/services/llmClient";
 import { requireEntitlementFeature } from "@/lib/billing/requireFeature";
 import { INTEL_ACTION_SOURCE, actionAvailability } from "@/lib/intel/intelSources";
 import { parseOllamaEndpoints } from "@/lib/llm/ollamaEndpoints";
+import { loadChatPriceFacts } from "@/services/chatPriceFacts";
+import { buildChatPriceFactsPrompt, detectChatPriceSymbols } from "@/lib/briefing/chatPriceGuard";
+import { loadWatchlistSymbols } from "@/services/briefInputs";
+import { describeMarketStatus, summarizeMarketStatus } from "@/lib/market/marketHours";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -113,6 +117,26 @@ Be concrete. Use numbers. Connect the dots others miss.`;
     if (live.trim()) {
       systemPrompt += `\n\n--- LIVE INTEL SNAPSHOT ---\n${live}`;
     }
+  }
+
+  // Real prices + market hours for the markets in play (named, else the
+  // trader's watchlist). Without them AXE Intel answered "without live
+  // pricing, exact levels can't be pinpointed".
+  {
+    let priceSymbols = detectChatPriceSymbols({ message, effectiveSymbol: symbol ?? null });
+    if (priceSymbols.length === 0) {
+      priceSymbols = (await loadWatchlistSymbols(supabase, user.id).catch(() => [] as string[])).slice(0, 3);
+    }
+    if (priceSymbols.length > 0) {
+      const facts = await loadChatPriceFacts(supabase, user.id, priceSymbols).catch(() => []);
+      const pricePrompt = buildChatPriceFactsPrompt(facts);
+      if (pricePrompt) systemPrompt += `\n\n${pricePrompt}`;
+      const status = summarizeMarketStatus(priceSymbols);
+      systemPrompt += `\n\nMARKET STATUS (exchange hours, now):\n${status.statuses
+        .map((st) => `- ${describeMarketStatus(st, "Europe/Amsterdam")}`)
+        .join("\n")}\nA CLOSED market gets no "today" plan — only "at the reopen".`;
+    }
+    systemPrompt += `\n\nData honesty: use only the feeds present above. A feed that is missing or marked stale/paused is unavailable — say so in one line and never infer its content.`;
   }
 
   // ── Build messages ────────────────────────────────────────────────

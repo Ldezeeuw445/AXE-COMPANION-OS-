@@ -12,6 +12,7 @@ import { getAuthedServiceSupabase } from "@/services/serviceSupabase";
 import { listWatchlistItems, getAccountName } from "@/app/(app)/settings/actions";
 import { PinnedContextEditor } from "@/components/settings/PinnedContextEditor";
 import { WatchlistManager } from "@/components/settings/WatchlistManager";
+import { BriefFocusPanel } from "@/components/settings/BriefFocusPanel";
 import { AccountNameEditor } from "@/components/settings/AccountNameEditor";
 import { PushPermission } from "@/components/push/PushPermission";
 import { PushNotificationPrefsPanel } from "@/components/push/PushNotificationPrefsPanel";
@@ -202,6 +203,19 @@ export default async function SettingsPage() {
         </p>
         <div className="mt-3">
           <WatchlistManager items={watchlist} />
+        </div>
+      </GlassPanel>
+
+      {/* Morning brief focus */}
+      <GlassPanel className="mb-4 p-4">
+        <h2 className="text-[10px] font-medium uppercase tracking-widest text-tos-dim">
+          Morning brief focus
+        </h2>
+        <p className="mt-1 text-xs text-tos-muted">
+          Which markets your morning brief, weekly outlook and market recap cover — and which they never mention.
+        </p>
+        <div className="mt-3">
+          <BriefFocusPanel />
         </div>
       </GlassPanel>
 
