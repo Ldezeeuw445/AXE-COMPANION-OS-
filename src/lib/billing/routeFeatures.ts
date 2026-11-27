@@ -25,6 +25,7 @@ export const PAID_ROUTE_FEATURES: Record<string, AxeFeature> = {
   "chart/pending-actions": "chart_actions",
   "cockpit/briefing": "briefings",
   "cockpit/generate": "cockpit_learning",
+  "cockpit/learning": "cockpit_learning",
   "cockpit/today": "cockpit_learning",
   "intel-chat": "advanced_intel",
   "intel-conviction": "advanced_intel",

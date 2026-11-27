@@ -42,7 +42,9 @@ function findRoutes(dir, base = "") {
 }
 
 const routes = findRoutes("src/app/api");
-const AUTH_MARKERS = /auth\.getUser\(\)|getAuthedServiceSupabase/;
+// userSupabaseFromRequest (src/lib/auth/tradingOsBearer.ts) resolves the user
+// via auth.getUser() from the cookie session or a Trading OS Bearer token.
+const AUTH_MARKERS = /auth\.getUser\(\)|getAuthedServiceSupabase|userSupabaseFromRequest\(/;
 
 console.log("tier gates");
 
