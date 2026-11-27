@@ -15,7 +15,7 @@ import { countAutoTradesToday } from "@/lib/trading/autoTradeCount";
 import { evaluateAutoTrade } from "@/lib/trading/autoTradeGuard";
 import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
 import { loadSharedEconomicCalendar } from "@/lib/market/sharedEconCalendarLoader";
-import { mergeGuardCalendar, withTimeout } from "@/lib/trading/guardCalendar";
+import { guardNewsEvents, withTimeout } from "@/lib/trading/guardCalendar";
 import { readNewsWindow, type NewsReading } from "@/lib/trading/newsWindow";
 import {
   AUTONOMY_MAX_LOT_CEILING,
@@ -283,7 +283,8 @@ export async function decideAutoTradeAllowed(
   // Finance Calendar (shared table, filled by Trading OS) is MERGED into the
   // existing chain, never replacing it: more / more precise high-impact
   // events, none dropped. A stale (> 2h), empty, failing or slow (> 3 s) read
-  // adds nothing, so the guard then behaves exactly as before.
+  // adds nothing, so the guard then behaves exactly as before. If the existing
+  // chain itself fails or is empty, Finance Calendar adds nothing either.
   let newsReading: NewsReading = { calendarKnown: false, minutesToHighImpact: null };
   const sharedEventsP = withTimeout(loadSharedEconomicCalendar(2), 3_000, []);
   let chainEvents: Awaited<ReturnType<typeof loadEconomicCalendar>> | null = null;
@@ -296,8 +297,11 @@ export async function decideAutoTradeAllowed(
     );
   }
   const sharedEvents = await sharedEventsP;
-  if (chainEvents !== null || sharedEvents.length > 0) {
-    newsReading = readNewsWindow(mergeGuardCalendar(chainEvents ?? [], sharedEvents), Date.now());
+  // Existing chain down -> stay fail-closed (news_unknown), even if Finance
+  // Calendar is fresh. Finance Calendar only adds to a working chain.
+  const guardEvents = guardNewsEvents(chainEvents, sharedEvents);
+  if (guardEvents !== null) {
+    newsReading = readNewsWindow(guardEvents, Date.now());
   }
   const { minutesToHighImpact, calendarKnown } = newsReading;
 

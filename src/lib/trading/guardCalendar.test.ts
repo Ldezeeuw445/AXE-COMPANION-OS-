@@ -5,6 +5,7 @@ import { buildAccountProfile } from "../risk/accountProfile";
 import { evaluateAutoTrade, type AutoTradeGuardInput } from "./autoTradeGuard";
 import { readNewsWindow } from "./newsWindow";
 import {
+  guardNewsEvents,
   isDuplicateEvent,
   mergeGuardCalendar,
   normaliseEventName,
@@ -115,10 +116,28 @@ test("XAUUSD and every symbol: no currency filter, before or after (any high-imp
   assert.equal(guard([...existing, ff("Manufacturing PMI", "CNY", "2026-11-11T12:15:00Z")]).allowed, false);
 });
 
-test("existing chain failed but Finance Calendar fresh: calendar is known from Finance Calendar", () => {
-  const r = readNewsWindow(mergeGuardCalendar([], [fc("US CPI", "USD", "2026-11-11T14:00:00Z")]), NOW.getTime());
-  assert.equal(r.calendarKnown, true);
-  assert.equal(r.minutesToHighImpact, null); // 120 min away: outside the look-ahead
+test("existing chain FAILED + Finance Calendar fresh: still blocks with news_unknown, as before", () => {
+  const fresh = [fc("US CPI", "USD", "2026-11-11T14:00:00Z")]; // 120 min away, would otherwise allow
+  assert.equal(guardNewsEvents(null, fresh), null);
+  // tradeGuardService keeps the default reading when guardNewsEvents is null:
+  const reading = { calendarKnown: false, minutesToHighImpact: null };
+  const d = guard([], { calendarKnown: reading.calendarKnown, minutesToHighImpact: reading.minutesToHighImpact });
+  assert.equal(d.allowed === false && d.reason, "news_unknown");
+});
+
+test("existing chain EMPTY + Finance Calendar fresh: unknown exactly as before", () => {
+  const fresh = [fc("US CPI", "USD", "2026-11-11T14:00:00Z")];
+  const empty: GuardCalendarEvent[] = [];
+  assert.equal(guardNewsEvents(empty, fresh), empty);
+  assert.equal(readNewsWindow(guardNewsEvents(empty, fresh)!, NOW.getTime()).calendarKnown, false);
+});
+
+test("existing chain working: Finance Calendar adds its events (union)", () => {
+  const chain = [ff("Retail Sales m/m", "USD", "2026-11-12T13:30:00Z")];
+  const out = guardNewsEvents(chain, [fc("US CPI", "USD", "2026-11-11T12:20:00Z")])!;
+  assert.equal(out.length, 2);
+  assert.equal(readNewsWindow(out, NOW.getTime()).minutesToHighImpact, 20);
+  assert.equal(guardNewsEvents(chain, []), chain); // stale/empty FC -> same array
 });
 
 test("withTimeout: value, rejection and slowness all resolve, never throw", async () => {
@@ -131,5 +150,7 @@ test("wiring: tradeGuardService merges, keeps loadEconomicCalendar, times out th
   const src = readFileSync(new URL("../../services/tradeGuardService.ts", import.meta.url), "utf8");
   assert.match(src, /loadEconomicCalendar\(\{ symbol, daysAhead: 2, limit: 200 \}\)/);
   assert.match(src, /withTimeout\(loadSharedEconomicCalendar\(2\), 3_000, \[\]\)/);
-  assert.match(src, /readNewsWindow\(mergeGuardCalendar\(chainEvents \?\? \[\], sharedEvents\), Date\.now\(\)\)/);
+  assert.match(src, /guardNewsEvents\(chainEvents, sharedEvents\)/);
+  assert.match(src, /if \(guardEvents !== null\) \{\s*newsReading = readNewsWindow\(guardEvents, Date\.now\(\)\);/);
+  assert.doesNotMatch(src, /chainEvents \?\? \[\]/);
 });

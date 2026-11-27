@@ -89,6 +89,24 @@ export function mergeGuardCalendar<T extends GuardCalendarEvent>(
 }
 
 /** Resolve to `fallback` when `p` rejects or takes longer than `ms`. Never throws. */
+/**
+ * Which events the news guard reads. Finance Calendar only ADDS to a working
+ * existing chain (Finnhub -> market-proxy -> Forex Factory):
+ * - chain failed (null)  -> null: caller keeps the fail-closed "unknown" reading
+ *   (news_unknown), even when Finance Calendar is fresh;
+ * - chain returned []    -> the same [] (readNewsWindow reads it as unknown,
+ *   exactly as before);
+ * - chain has events     -> chain UNION non-duplicate Finance Calendar rows.
+ */
+export function guardNewsEvents<T extends GuardCalendarEvent>(
+  chain: readonly T[] | null,
+  shared: readonly T[],
+): readonly T[] | null {
+  if (chain === null) return null;
+  if (chain.length === 0) return chain;
+  return mergeGuardCalendar(chain, shared);
+}
+
 export function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
   return new Promise<T>((resolve) => {
     const timer = setTimeout(() => resolve(fallback), ms);
