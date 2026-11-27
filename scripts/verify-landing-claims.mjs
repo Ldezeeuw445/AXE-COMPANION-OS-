@@ -1,10 +1,11 @@
 /**
  * The landing page is a promise. These checks keep it one we keep.
  *
- * The public homepage is the finallaunch / Trading-OS-twin Companion landing:
- * "The trader's phone OS", device plate, hover-reveal cards, second brain,
- * intel feed grid, execution discipline, Companion-only feature grid,
- * Trading OS bridge, billing-backed pricing, FAQ, waitlist, legal.
+ * The public homepage is the AXE Companion landing: the phone app of the AXE
+ * ecosystem, next to Trading OS on the desk. Hero with real, dated captures of
+ * the live site, the ecosystem band, A/X/E cards, the Companion feature grid,
+ * the intel grid with a source per tile, MT5, billing-backed pricing, FAQ,
+ * waitlist, legal. Luka's rule (26 Nov 2026): no mock or demo data anywhere.
  * Claims must stay true as the app moves.
  *
  * Run: node scripts/verify-landing-claims.mjs
@@ -25,19 +26,13 @@ import {
 import {
   COMPANION_FEATURES,
   LANDING_CHECKOUT_HREF,
-  LANDING_DISCIPLINE,
+  LANDING_ECOSYSTEM,
   LANDING_FAQ,
   LANDING_FEEDS_BAND,
   LANDING_HERO,
   LANDING_INTEL_FEED_COUNT,
   LANDING_INTEL_FEEDS,
-  LANDING_INTRO,
-  LANDING_REVEAL_CARDS,
-  LANDING_SECOND_BRAIN,
-  LANDING_SHOWCASE,
-  LANDING_TOS_BRIDGE,
-  LANDING_TESTIMONIALS,
-  landingTestimonialsEnabled,
+  LANDING_REAL_CAPTURES,
 } from "../src/lib/marketing/landingCopy.ts";
 import { DEFAULT_AFTER_LOGIN, safeAppPath } from "../src/lib/auth/safeAppPath.ts";
 
@@ -63,44 +58,44 @@ const landing = [
 ].join("\n");
 const switcher = read("src/components/marketing/AppSwitcher.tsx");
 const robots = read("src/app/robots.ts");
-const hero = read("src/components/marketing/LandingHeroDevices.tsx");
+const hero = read("src/components/marketing/LaunchHeroExperience.tsx");
 const heroCss = read("src/app/globals.css");
-const heroMock = read("public/hero-demo/app.html");
 const sitemap = read("src/app/sitemap.ts");
 const nextConfig = read("next.config.ts");
 
 console.log("landing claims");
 
-check("the homepage is the finallaunch Companion landing Luka asked for", () => {
+check("the homepage is the Companion landing: the phone app next to Trading OS", () => {
   assert.equal(LANDING_HERO.titleLead, "AXE Companion.");
-  assert.equal(LANDING_HERO.titleAccent, "The trader's phone OS.");
-  assert.match(LANDING_HERO.badge, /AXE Companion OS/i);
-  assert.equal(LANDING_SECOND_BRAIN.titleAccent, "Your Second Brain For Trading.");
-  assert.equal(LANDING_REVEAL_CARDS[0].title, "Surface the signal.");
-  assert.equal(LANDING_REVEAL_CARDS[1].title, "Quiet, but not flat.");
-  assert.equal(LANDING_REVEAL_CARDS[2].title, "Premium motion cues.");
-  assert.match(landing, /Try the live demo/);
+  assert.match(LANDING_HERO.body, /phone app/i, "Companion is the phone app");
+  assert.match(LANDING_HERO.body, /Trading OS/, "the hero names the desktop terminal");
+  assert.match(LANDING_HERO.body, /same login/i, "one account across both");
+  assert.match(LANDING_ECOSYSTEM.body, /same account/i);
   assert.match(landing, /See pricing/);
-  assert.equal(LANDING_DISCIPLINE.title, "Execution discipline, from your fills.");
   assert.equal(LANDING_FEEDS_BAND.titleLead, "AXE intel feeds");
-  assert.match(landing, /LaunchHeroExperience/);
-  assert.match(landing, /LandingHeroDevices/);
-  assert.match(landing, /LandingShowcase/);
-  assert.match(landing, /LandingFeatureGrid/);
-  assert.match(landing, /LandingPricing/);
-  assert.match(landing, /LandingFaq/);
-  assert.match(landing, /LandingFinalCta/);
-  assert.ok(!/LandingCockpitExample/.test(landing));
-  assert.ok(!/LandingDeskChat/.test(landing));
-  assert.ok(!/LandingEngine/.test(landing));
-  assert.ok(!/LandingSurfaces/.test(landing));
-  assert.equal(LANDING_INTRO.loginBody.includes("Supabase"), false);
-  assert.equal(LANDING_SHOWCASE.length, 8);
-  for (const row of LANDING_SHOWCASE) {
-    assert.notEqual(row.href, "#", `${row.step} must not use href='#'`);
+  for (const part of [
+    "LaunchHeroExperience",
+    "LandingEcosystem",
+    "LandingFeatureGrid",
+    "LandingIntelFeeds",
+    "LandingPricing",
+    "LandingFaq",
+    "LandingFinalCta",
+  ]) {
+    assert.match(read("src/app/page.tsx"), new RegExp(`<${part}`), `${part} must be on the page`);
+  }
+  for (const gone of [
+    "LandingShowcase",
+    "LandingDiscipline",
+    "LandingBehaviorMap",
+    "LandingDemoSession",
+    "LandingTestimonialsSlot",
+    "LandingHeroDevices",
+    "LandingCockpitExample",
+  ]) {
+    assert.ok(!landing.includes(`<${gone}`), `${gone} showed mock, sample or empty content; keep it off`);
   }
   const copy = read("src/lib/marketing/landingCopy.ts");
-  assert.ok(!/same Supabase account/i.test(copy), "marketing copy must not mention a Supabase account");
   assert.ok(!/Supabase/i.test(copy), "marketing copy must not name Supabase");
   assert.ok(!/Row-Level Security/i.test(copy), "marketing copy must not use database jargon");
 });
@@ -130,10 +125,11 @@ check("the intel feed headline uses the real count from this repo", () => {
   assert.equal(LANDING_INTEL_FEED_COUNT, 13 + 6);
   assert.equal(LANDING_INTEL_FEEDS.length, LANDING_INTEL_FEED_COUNT);
   assert.match(landing, /AXE intel feeds/);
-  assert.equal(LANDING_INTEL_FEEDS.filter((feed) => feed.notConfigured).length, 3);
-  for (const feed of LANDING_INTEL_FEEDS.filter((row) => row.notConfigured)) {
-    assert.match(feed.desc, /not configured/i);
+  for (const feed of LANDING_INTEL_FEEDS) {
+    assert.ok(feed.source && feed.source.length > 2, `${feed.title} must name its source`);
   }
+  const chokepoints = LANDING_INTEL_FEEDS.find((feed) => feed.icon === "chokepoints");
+  assert.match(chokepoints.desc, /not a live/i, "chokepoint figures are a static table in intelClient.ts");
   assert.match(
     read("src/components/marketing/landing/LandingIntelFeeds.tsx"),
     /\{LANDING_INTEL_FEED_COUNT\}/,
@@ -160,7 +156,7 @@ check("Unusual Whales is only ever disclosed, never advertised", () => {
 });
 
 check("it does name the free intel sources that do work", () => {
-  for (const source of ["SEC EDGAR", "GDELT"]) {
+  for (const source of ["SEC EDGAR", "FINRA", "Nasdaq", "CISA", "EIA"]) {
     assert.ok(landing.includes(source), `${source} should be named instead`);
   }
 });
@@ -171,7 +167,7 @@ check("the FAQ's 'not subscribed' list matches INTEL_ACTION_SOURCE", () => {
   const answer = item.a;
   assert.ok(answer.length > 200, "the intel answer is too short to be the real claim");
   const label = {
-    darkPoolPrints: "dark-pool prints",
+    darkPoolPrints: "dark-pool",
     unusualOptions: "options flow",
     marketTide: "market tide",
     senateTrades: "congressional",
@@ -278,8 +274,8 @@ check("the FAQ answers whether AXE can trade on its own", () => {
   );
 });
 
-check("the guard rails are named, all five of them", () => {
-  for (const rule of [/news window/i, /weekend/i, /lot (is )?above/i, /daily loss/i, /maximum of automatic trades|day's maximum/i]) {
+check("the guard rails are named, as autoTradeGuard checks them", () => {
+  for (const rule of [/news window/i, /weekend/i, /lot (is )?above/i, /risk per trade/i, /daily loss/i, /total loss/i, /maximum of automatic trades|day's maximum/i]) {
     assert.ok(rule.test(landing), `guard not mentioned: ${rule}`);
   }
 });
@@ -291,33 +287,25 @@ check("the page promises a block, never a quiet downsize", () => {
   );
 });
 
-check("the feature grid is Companion-only; TOS stays in the labelled bridge", () => {
-  assert.equal(LANDING_TOS_BRIDGE.kicker, "with Trading OS");
+check("the feature grid is Companion-only; desk features stay on the Trading OS card", () => {
   const joined = COMPANION_FEATURES.map((f) => `${f.title} ${f.desc}`).join("\n");
   for (const forbidden of ["QuantLab", "command palette", "sector heatmap", "BIGMAC", "Polymarket"]) {
     assert.ok(!new RegExp(forbidden, "i").test(joined), `${forbidden} is a desk feature — keep it out of the grid`);
   }
-  assert.ok(
-    LANDING_TOS_BRIDGE.features.some((f) => /QuantLab|multi-chart|command palette/i.test(f)),
-    "the bridge must name desk features",
-  );
+  assert.ok(LANDING_ECOSYSTEM.desk.points.length > 0, "the Trading OS card must say what the desk is");
 });
 
-check("no fabricated testimonials ship", () => {
-  assert.equal(LANDING_TESTIMONIALS.length, 0, "do not invent quotes");
-  assert.equal(landingTestimonialsEnabled({}), false);
+check("no testimonials, reviews, user counts or partner logos", () => {
+  assert.ok(!landing.includes("LANDING_TESTIMONIALS"), "an empty testimonials slot is removed, not kept");
   for (const name of ["Freya H.", "Thomas M.", "Elena R.", "Sarah L.", "Marcus K."]) {
     assert.ok(!landing.includes(name), `${name} was a sample quote — leave it off`);
   }
-  assert.ok(!/Verified quotes\s*6|Avg\.? rating\s*4\.7/i.test(landing), "no fake social proof");
-  assert.ok(landing.includes("data-landing-testimonials"), "keep the flagged slot");
+  assert.ok(!/Verified quotes|Avg\.? rating|\d[\d,.]*\+? (traders|users)\b|Trusted by/i.test(landing), "no fake social proof");
 });
 
-check("the alignment panel is labelled as example chrome, not live account data", () => {
-  assert.match(landing, /Example cockpit chrome/);
-  assert.match(landing, /Example — sample behavior map, not live data/);
-  assert.ok(landing.includes('data-landing-cockpit-example="true"'), "BehaviorMap sample hook");
-  assert.ok(!/LandingCockpitExample/.test(landing), "do not revive the fake cockpit mock");
+check("no sample numbers on the page", () => {
+  assert.ok(!/Example cockpit chrome|sample behavior map|example chrome/i.test(landing), "samples are removed, not labelled");
+  assert.ok(!landing.includes("data-landing-cockpit-example"), "the sample cockpit is gone");
   assert.ok(!/FIT score/.test(landing), "FIT is not a product metric; Cockpit uses alignment");
 });
 
@@ -339,7 +327,7 @@ check("the page claims the systems that actually run", () => {
   assert.match(tiersSrc, /Account health monitoring/);
   assert.match(landing, /Push notification delivery is live/);
   assert.match(landing, /background watcher fires/i);
-  assert.match(landing, /live per-firm drawdown/i);
+  assert.match(landing, /per-firm drawdown/i);
   assert.match(landing, /auto-journal/i);
   assert.ok(!/Push notification delivery is not live/i.test(landing));
   assert.ok(!/background watcher is not firing alerts/i.test(landing));
@@ -352,7 +340,6 @@ check("the page claims the systems that actually run", () => {
   assert.ok(!/Vector RAG memory|axe_memories/i.test(landing));
   assert.ok(!/streams it live, right next to your chart/i.test(landing));
   assert.ok(!/visible in real time/i.test(landing));
-  assert.match(landing, /LandingBehaviorMap/);
 });
 
 check("Founder is €59/mo limited to the seat cap, in copy and checkout", () => {
@@ -370,10 +357,17 @@ check("Founder is €59/mo limited to the seat cap, in copy and checkout", () =>
   assert.match(landing, /\{FOUNDER_SEAT_CAP\}/);
 });
 
-check("Try the live demo opens the no-login device mock", () => {
-  assert.match(landing, /href="#hero-devices"/);
-  assert.ok(hero.includes('id="hero-devices"'));
-  assert.ok(hero.includes("/hero-demo/app.html"));
+check("the hero shows real captures of the live site, not a mock", () => {
+  const heroCode = hero.replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.ok(!/<iframe/.test(heroCode), "no embedded mock in the hero");
+  assert.ok(!/hero-demo/.test(heroCode), "the no-login mock is gone");
+  assert.ok(!existsSync(new URL("../public/hero-demo/app.html", import.meta.url)), "the mock must not be served either");
+  assert.ok(LANDING_REAL_CAPTURES.length >= 1);
+  for (const capture of LANDING_REAL_CAPTURES) {
+    assert.match(capture.src, /^\/landing\/real\/.+-\d{4}-\d{2}-\d{2}\.png$/, "a capture carries its date");
+    assert.ok(existsSync(new URL(`../public${capture.src}`, import.meta.url)), `${capture.src} is missing`);
+  }
+  assert.match(landing, /LANDING_CAPTURE_NOTE/, "the page says what the screens are");
 });
 
 check("no href='#' and no bare social domains", () => {
@@ -382,14 +376,14 @@ check("no href='#' and no bare social domains", () => {
 });
 
 check("app buttons go to Companion routes", () => {
-  for (const href of ['href="/login"', 'href="/signup"', 'href="/welcome"', 'href="/chat"']) {
+  for (const href of ['href="/login"', 'href="/signup"']) {
     assert.ok(landing.includes(href), `${href} should be on the landing`);
   }
 });
 
-check("waitlist copy says AXE Companion", () => {
-  assert.match(landing, /Join the AXE Companion waitlist/);
-  assert.ok(!/Join the Trading OS waitlist/.test(landing));
+check("the waitlist is plainly for the Trading OS beta", () => {
+  assert.match(landing, /Join the Trading OS beta waitlist/);
+  assert.equal([...landing.matchAll(/id="waitlist"/g)].length, 1, "one #waitlist target, not two");
 });
 
 check("the retired drafts redirect to / instead of competing with it", () => {
@@ -554,62 +548,6 @@ check("it is reachable by keyboard and announced", () => {
   assert.ok(
     /hidden whitespace-nowrap sm:inline">Switch app</.test(switcher),
     "the trigger needs a visible label from sm up",
-  );
-});
-
-check("the hero mock needs no account and makes no network call", () => {
-  const heroCode = hero.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  assert.ok(!/\/demo\/embed/.test(heroCode), "the hero must not depend on /demo/embed");
-  assert.ok(hero.includes("/hero-demo/app.html"), "the hero runs the self-contained mock");
-  for (const forbidden of [/supabase/i, /\bfetch\s*\(/, /\/api\//]) {
-    assert.ok(!forbidden.test(heroMock), `the mock must stay self-contained; found ${forbidden}`);
-  }
-});
-
-check("the mock says it is a demo rather than passing for an account", () => {
-  assert.ok(/NO LOGIN/i.test(heroMock), "the mock labels itself");
-  assert.ok(/no account needed/i.test(hero), "and the hero says so underneath");
-});
-
-check("the mock walks the current five-tab shell plus the rest of the app", () => {
-  for (const screen of ["home", "markets", "chart", "axe", "account", "intel", "feed", "alerts", "journal", "positions", "settings"]) {
-    assert.ok(heroMock.includes(`data-screen="${screen}"`), `mock missing screen ${screen}`);
-  }
-  assert.ok(heroMock.includes("Home") && heroMock.includes("Markets") && heroMock.includes("Account"));
-  assert.ok(!/\$1\.71B/.test(heroMock), "do not ship fabricated tide notionals in the mock");
-  assert.ok(!/SPY 1\.2M/.test(heroMock), "do not ship fabricated dark-pool prints in the mock");
-  assert.ok(/Not configured/i.test(heroMock), "UW tiles in the mock must say not configured");
-  assert.ok(/ten minutes/i.test(heroMock), "the mock must say MT5 syncs on the ten-minute cadence");
-  assert.ok(/Push notification delivery is live/i.test(heroMock));
-  assert.ok(/background watcher fires/i.test(heroMock));
-  assert.ok(/Live per-firm drawdown alert/i.test(heroMock));
-  assert.ok(!/Push notification delivery is not live/i.test(heroMock));
-  assert.ok(!/background watcher is not firing alerts/i.test(heroMock));
-});
-
-check("both devices are there, at real logical sizes", () => {
-  assert.ok(/phone: \{ w: 390, h: 844/.test(hero), "iPhone logical size");
-  assert.ok(/ipad: \{ w: 1024, h: 768/.test(hero), "iPad logical size");
-  assert.ok(hero.includes("width / w"), "the frame scales the iframe to fit");
-  assert.ok(heroCss.includes("transform-origin: top left"), "a scaled iframe needs its origin pinned");
-});
-
-check("the mock draws no second device inside the bezel", () => {
-  assert.ok(hero.includes("chrome=off"), "the hero asks for the chrome-less mode");
-  assert.ok(/\.device\.bare::before \{ display: none; \}/.test(heroMock), "chrome=off must hide the mock's own notch");
-  assert.ok(/\.device\.bare\.mobile \.topbar/.test(heroMock), "and leave room under the bezel's notch");
-});
-
-check("the block lights its dot grid on hover, touch and focus", () => {
-  for (const cls of ["axe-hero-dots", "axe-hero-dots-active", "axe-hero-stage-active"]) {
-    assert.ok(heroCss.includes(`.${cls}`), `${cls} is missing from globals.css`);
-    assert.ok(hero.includes(cls), `${cls} is never applied`);
-  }
-  assert.ok(hero.includes("onPointerEnter"), "touch must light the block as well");
-  assert.ok(hero.includes("onFocusCapture"), "a keyboard user needs the same signal");
-  assert.ok(
-    /@media \(prefers-reduced-motion: reduce\)[\s\S]{0,220}axe-hero-dots/.test(heroCss),
-    "respect reduced motion",
   );
 });
 

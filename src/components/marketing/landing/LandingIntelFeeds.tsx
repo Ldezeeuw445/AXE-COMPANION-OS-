@@ -70,18 +70,18 @@ function FeedCard({ feed }: { feed: LandingIntelFeed }) {
       <div className="axe-launch-feed-icon">
         <Icon className="h-6 w-6" aria-hidden />
       </div>
-      <h3>
-        {feed.title}
-        {feed.notConfigured ? <span className="axe-launch-feed-status">Not configured</span> : null}
-      </h3>
+      <h3>{feed.title}</h3>
       <p>{feed.desc}</p>
+      <p className="mt-3 text-[11px] font-medium uppercase tracking-[0.14em] text-cyan-200/70">
+        Source · {feed.source}
+      </p>
     </article>
   );
 }
 
 export function LandingIntelFeeds() {
   return (
-    <section id="product" className="relative scroll-mt-24">
+    <section id="intel" className="relative scroll-mt-24">
       <div className="axe-launch-band">
         <p className="axe-launch-eyebrow">{LANDING_FEEDS_BAND.kicker}</p>
         <h2 className="axe-launch-band-title">

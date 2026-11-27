@@ -17,6 +17,7 @@
  * Run: node scripts/verify-landing-hero-light.mjs
  */
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { readFileSync } from "node:fs";
 
 const css = readFileSync("src/app/globals.css", "utf8");
@@ -154,14 +155,15 @@ check("de gloedbanden volgen de muis en staan op de pagina", () => {
   assert.match(rule(".axe-glow-band"), /--glow-x:\s*50%/);
   const page = readFileSync("src/app/page.tsx", "utf8");
   const n = (page.match(/<LandingGlowBand>/g) ?? []).length;
-  assert.ok(n >= 4, `${n} gloedbanden op de pagina — final-landing-v2-enhanced heeft er vier`);
+  // Drie sinds 26 nov: showcase, discipline en behavior map gingen eraf omdat
+  // ze verzonnen schermen en voorbeeldcijfers toonden.
+  assert.ok(n >= 3, `${n} gloedbanden op de pagina — verwacht minstens drie`);
 });
 
 console.log("");
-console.log("de reveal-kaarten en de behavior map");
+console.log("de reveal-kaarten");
 
 const kaarten = readFileSync("src/components/marketing/landing/LandingRevealCards.tsx", "utf8");
-const map = readFileSync("src/components/marketing/landing/LandingBehaviorMap.tsx", "utf8");
 const pagina = readFileSync("src/app/page.tsx", "utf8");
 
 check("de drie kaarten spellen A, X en E", () => {
@@ -194,12 +196,11 @@ check("zonder hover is de achterkant alsnog te lezen", () => {
   assert.match(blokken[0], /\.axe-reveal-back\s*\{[^}]*opacity:\s*1/, "de achterkant blijft verborgen");
 });
 
-check("de behavior map noemt zichzelf een voorbeeld", () => {
-  // Dezelfde haak als de cockpit, zodat één check beide dekt en een nieuwe
-  // sectie met verzonnen cijfers er niet langs glipt.
-  assert.ok(map.includes('data-landing-cockpit-example="true"'), "geen voorbeeld-haak");
-  assert.match(map, /Example — sample behavior map, not live data/, "het label staat niet op het scherm");
-  assert.ok(pagina.includes("<LandingBehaviorMap"), "de map staat niet op de pagina");
+check("geen voorbeeldcijfers meer op de pagina", () => {
+  // Luka, 26 nov 2026: geen mock- of demodata, ook niet met een label erop.
+  // De behavior map met 75% alignment en verzonnen sessies is weg.
+  assert.ok(!existsSync("src/components/marketing/landing/LandingBehaviorMap.tsx"), "de voorbeeld-map is terug");
+  assert.ok(!pagina.includes("<LandingBehaviorMap"), "de map staat weer op de pagina");
 });
 
 check("geen mockup met verzonnen inhoud", () => {
@@ -217,7 +218,6 @@ check("geen mockup met verzonnen inhoud", () => {
   // faalt op zijn eigen verantwoording leert niemand iets.
   const zonderUitleg = (bron) => bron.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   for (const bestand of ["behavior-phone-left-transparent", "behavior-phone-right-transparent"]) {
-    assert.ok(!zonderUitleg(map).includes(bestand), `${bestand} staat weer op de landing`);
     assert.ok(!zonderUitleg(pagina).includes(bestand), `${bestand} staat weer op de landing`);
   }
 });

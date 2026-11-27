@@ -30,10 +30,10 @@ export function LandingOpenAppQr() {
         <Image src={qrSrc} alt="QR code to open AXE Companion chat" width={200} height={200} unoptimized />
       </div>
       <div className="max-w-sm text-left text-sm text-tos-muted">
-        <p className="font-medium text-white">Scan to open chat</p>
+        <p className="font-medium text-white">Scan to open AXE Companion</p>
         <p className="mt-2">
           Same login after you open the link — synced with Trading OS on your desktop.{" "}
-          <span className="text-white/80">AXE Companion is the brain. Trading OS is the terminal.</span>
+          <span className="text-white/80">AXE Companion is the phone app. Trading OS is the desktop terminal.</span>
         </p>
         <p className="mt-3 break-all font-mono text-[11px] text-white/45">{chatUrl}</p>
       </div>
