@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { syncWriteClient } from "@/lib/supabase/syncWriteClient";
 import type {
   AccountConnection,
   BrokerSymbolMapping,
@@ -82,8 +83,13 @@ export class SupabaseDatabaseAdapter implements DatabaseAdapter {
   }
 
   async saveAccount(account: AccountConnection): Promise<AccountConnection> {
+    if (!(await this.getAccount(account.id))) {
+      throw new Error("Broker account not found for this user");
+    }
+
     const patch = accountConnectionToDbPatch(account);
-    const { data, error } = await this.supabase
+    const accountWriter = syncWriteClient(this.supabase);
+    const { data, error } = await accountWriter
       .from("user_broker_accounts")
       .update(patch)
       .eq("id", account.id)
