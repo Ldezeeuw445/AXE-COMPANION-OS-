@@ -14,6 +14,8 @@ import { refreshLiveAccountState } from "@/lib/mt5/refreshLiveAccount";
 import { countAutoTradesToday } from "@/lib/trading/autoTradeCount";
 import { evaluateAutoTrade } from "@/lib/trading/autoTradeGuard";
 import { loadEconomicCalendar } from "@/lib/market/calendarProvider";
+import { loadSharedEconomicCalendar } from "@/lib/market/sharedEconCalendarLoader";
+import { mergeGuardCalendar, withTimeout } from "@/lib/trading/guardCalendar";
 import { readNewsWindow, type NewsReading } from "@/lib/trading/newsWindow";
 import {
   AUTONOMY_MAX_LOT_CEILING,
@@ -277,15 +279,25 @@ export async function decideAutoTradeAllowed(
   // The limit is deliberately wide: the calendar is sorted by start time from
   // 12 h back, so a small limit can cut off the very event that is 20 minutes
   // away behind earlier ones.
+  //
+  // Finance Calendar (shared table, filled by Trading OS) is MERGED into the
+  // existing chain, never replacing it: more / more precise high-impact
+  // events, none dropped. A stale (> 2h), empty, failing or slow (> 3 s) read
+  // adds nothing, so the guard then behaves exactly as before.
   let newsReading: NewsReading = { calendarKnown: false, minutesToHighImpact: null };
+  const sharedEventsP = withTimeout(loadSharedEconomicCalendar(2), 3_000, []);
+  let chainEvents: Awaited<ReturnType<typeof loadEconomicCalendar>> | null = null;
   try {
-    const events = await loadEconomicCalendar({ symbol, daysAhead: 2, limit: 200 });
-    newsReading = readNewsWindow(events, Date.now());
+    chainEvents = await loadEconomicCalendar({ symbol, daysAhead: 2, limit: 200 });
   } catch (err) {
     console.error(
       "[tradeGuard] economic calendar unavailable",
       err instanceof Error ? err.message : String(err),
     );
+  }
+  const sharedEvents = await sharedEventsP;
+  if (chainEvents !== null || sharedEvents.length > 0) {
+    newsReading = readNewsWindow(mergeGuardCalendar(chainEvents ?? [], sharedEvents), Date.now());
   }
   const { minutesToHighImpact, calendarKnown } = newsReading;
 
