@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { type PushCategory } from "@/lib/push/categories";
 import { dispatchPushEvent } from "@/lib/push/dispatch";
 import type { PushSender } from "@/lib/push/deliver";
+import { normalizeEventKey } from "@/lib/push/dedup";
 import { renderNoticeBody, type ProactiveNotice } from "@/lib/axe/notice";
 
 export type AnnounceOptions = {
@@ -41,19 +42,34 @@ export async function announce(
     body,
     url: opts.notice.action.href,
   });
-  if (error) {
-    // Duplicate event key: already said, and saying it twice is how a useful
-    // notice becomes one the trader swipes away without reading.
-    if (error.code === "23505") return { created: 0, pushed: 0 };
-    throw error;
-  }
+  if (error && error.code !== "23505") throw error;
+  const created = error ? 0 : 1;
 
-  if (!opts.hasPush) return { created: 1, pushed: 0 };
+  if (!opts.hasPush) return { created, pushed: 0 };
+
+  if (!created) {
+    // A feed row proves the notice was recorded, not that any device received
+    // it. Failed delivery releases its claim, so the next watcher run may retry.
+    // Keep a successful (or still in-flight) claim once per event, even after
+    // the category cooldown; a continuing condition is not a new notice.
+    // MT5 sync records the same feed events via recordProactiveFeedEvent,
+    // whose push claims carry a `feed:` prefix. Both count as already sent.
+    const { data: deliveries, error: deliveryError } = await supabase
+      .from("push_event_deliveries")
+      .select("event_key")
+      .eq("user_id", userId)
+      .in("event_key", [normalizeEventKey(opts.eventKey), normalizeEventKey(`feed:${opts.eventKey}`)]);
+    // Only retry when absence is confirmed. An unavailable delivery ledger
+    // must not turn every existing feed row into a repeated notification.
+    if (deliveryError || !deliveries || deliveries.length > 0) return { created, pushed: 0 };
+  }
 
   const result = await dispatchPushEvent({
     userId,
     category: opts.category,
-    eventKey: opts.eventKey,
+    // Share the MT5 feed producer's claim, including when both producers race
+    // between inserting the feed row and claiming push delivery.
+    eventKey: `feed:${opts.eventKey}`,
     title: `AXE · ${opts.notice.title}`,
     body,
     url: opts.notice.action.href,
@@ -65,5 +81,5 @@ export async function announce(
     now: opts.now,
   });
 
-  return { created: 1, pushed: result.ok && result.sent > 0 ? 1 : 0 };
+  return { created, pushed: result.ok && result.sent > 0 ? 1 : 0 };
 }

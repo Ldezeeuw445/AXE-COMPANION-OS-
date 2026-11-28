@@ -5,7 +5,7 @@ import { LiveStatusReporter } from "@/components/shell/LiveStatusReporter";
 import { parseFeedTabParam } from "@/lib/feed/feedTabs";
 
 type FeedPageProps = {
-  searchParams: Promise<{ tab?: string }> | { tab?: string };
+  searchParams: Promise<{ tab?: string }>;
 };
 
 export default async function FeedPage({ searchParams }: FeedPageProps) {

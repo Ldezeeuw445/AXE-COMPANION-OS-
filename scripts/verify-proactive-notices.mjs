@@ -221,13 +221,9 @@ check("the push body is the feed body, not a second version of it", () => {
   assert.ok(/url: opts\.notice\.action\.href/.test(announce), "and the row links where the action says");
 });
 
-check("a duplicate notice is still dropped silently", () => {
-  // Saying the same thing twice is how a useful notice becomes one the trader
-  // swipes away without reading, and the unique index is what prevents it.
-  const announce = announceCode.slice(announceCode.indexOf("async function announce"));
-  assert.ok(/error\.code === "23505"/.test(announce));
-  assert.ok(/return \{ created: 0, pushed: 0 \}/.test(announce));
-});
+// Duplicate feed rows can retry a failed push. The behavioral cases in
+// src/lib/push/pushDelivery.test.ts verify that delivery recovers without
+// duplicating either the feed row or an already successful push.
 
 check("the trade-closed notice stopped describing the app's housekeeping", () => {
   assert.ok(
