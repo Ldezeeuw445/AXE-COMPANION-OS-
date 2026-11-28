@@ -3,6 +3,8 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
 
+let warnedFallback = false;
+
 /**
  * TOS-SEC-2 prep: the client the MT5 sync writes with.
  *
@@ -27,9 +29,29 @@ import { createServiceRoleSupabaseClient } from "@/lib/supabase/serviceRole";
  *
  * Falls back to the caller's client when no service-role key is configured, so
  * local and preview environments keep working exactly as they do now.
+ *
+ * In production that fallback is the one way the TOS-SEC-2 revoke turns into an
+ * outage (docs/TOS-SEC-2-REVOKE.md): once the trader's write grants are gone the
+ * fallback writes are refused, and before that they quietly run on rights that
+ * are meant to disappear. Either way nothing else would say so, so it warns —
+ * once per process, because this runs on every sync.
  */
 export function syncWriteClient(userClient: SupabaseClient): SupabaseClient {
-  return createServiceRoleSupabaseClient() ?? userClient;
+  const elevated = createServiceRoleSupabaseClient();
+  if (elevated) return elevated;
+  if (process.env.NODE_ENV === "production" && !warnedFallback) {
+    warnedFallback = true;
+    console.warn(
+      "[sync-write] SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is missing: the MT5 sync is writing " +
+        "with the trader's own client. This breaks once the TOS-SEC-2 revoke is applied.",
+    );
+  }
+  return userClient;
+}
+
+/** Tests only: forget that the fallback warning was already given. */
+export function resetSyncWriteFallbackWarning(): void {
+  warnedFallback = false;
 }
 
 /**

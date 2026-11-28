@@ -29,6 +29,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { dispatchPushEvent } from "@/lib/push/dispatch";
 import type { PushSender } from "@/lib/push/deliver";
 import { announce, type AnnounceOptions } from "@/lib/axe/announce";
+import { recordProactiveFeedEvent } from "@/lib/feed/recordProactiveFeedEvent";
 
 type DeliveryRow = {
   user_id: string;
@@ -103,6 +104,12 @@ function fakeSupabase(state: FakeState): SupabaseClient {
           const hit = state.deliveries.filter((r) => matches(r as unknown as Record<string, unknown>));
           for (const row of hit) Object.assign(row, payload);
           return { data: hit.map((r) => ({ ...r })), error: null };
+        }
+        if (op === "delete") {
+          state.deliveries = state.deliveries.filter(
+            (r) => !matches(r as unknown as Record<string, unknown>),
+          );
+          return { data: null, error: null };
         }
         const found = state.deliveries.filter((r) => matches(r as unknown as Record<string, unknown>));
         return { data: single ? (found[0] ?? null) : found, error: null };
@@ -495,7 +502,7 @@ describe("C6 watcher announce -> device", () => {
       assert.equal(payload.body, body);
       assert.equal(payload.url, "/positions");
       assert.equal(payload.category, "risk_alert");
-      assert.equal(payload.eventKey, "drawdown:acct-7:2026-10-28");
+      assert.equal(payload.eventKey, "feed:drawdown:acct-7:2026-10-28");
     }
   });
 
@@ -506,10 +513,154 @@ describe("C6 watcher announce -> device", () => {
 
     await announce(supabase, USER, announceOpts(send));
     const again = await announce(supabase, USER, announceOpts(send));
+    const pastCooldown = await announce(supabase, USER, announceOpts(send, {
+      now: new Date("2026-10-28T14:00:00.000Z"),
+    }));
 
     assert.deepEqual(again, { created: 0, pushed: 0 });
+    assert.deepEqual(pastCooldown, { created: 0, pushed: 0 });
     assert.equal(state.proactiveEvents?.length, 1);
     assert.equal(calls.length, 1);
+  });
+
+  it("retries a temporary delivery failure on the next watcher run without duplicating the feed", async () => {
+    const endpoint = "https://fcm.example/dev-a";
+    const state = stateWithDevices([endpoint]);
+    const supabase = fakeSupabase(state);
+    const failed = recordingSender({ [endpoint]: 503 });
+
+    const first = await announce(supabase, USER, announceOpts(failed.send));
+    assert.deepEqual(first, { created: 1, pushed: 0 });
+    assert.equal(failed.calls.length, 1);
+    assert.equal(state.deliveries.length, 0, "failed delivery releases its claim");
+
+    const retry = recordingSender();
+    const next = await announce(supabase, USER, announceOpts(retry.send, {
+      now: new Date("2026-10-28T12:01:00.000Z"),
+    }));
+
+    assert.deepEqual(next, { created: 0, pushed: 1 });
+    assert.equal(state.proactiveEvents?.length, 1);
+    assert.equal(state.deliveries.length, 1);
+    assert.equal(retry.calls.length, 1);
+    assert.equal(retry.calls[0].endpoint, endpoint);
+    assert.equal(retry.calls[0].payload, failed.calls[0].payload);
+  });
+
+  it("does not resend a notice already pushed by the MT5 feed producer", async () => {
+    const state = stateWithDevices(["https://fcm.example/dev-a"]);
+    const supabase = fakeSupabase(state);
+    const { send, calls } = recordingSender();
+    const opts = announceOpts(send);
+
+    const created = await recordProactiveFeedEvent(
+      supabase, USER, opts.eventKey, drawdownNotice.title, "Loss limit close", "/positions",
+      {
+        category: "risk_alert",
+        dispatch: (input) => dispatchPushEvent({ ...input, supabase, send, now: opts.now }),
+      },
+    );
+    assert.equal(created, true);
+    assert.equal(state.deliveries[0].event_key, `feed:${opts.eventKey}`);
+
+    const result = await announce(supabase, USER, announceOpts(send, {
+      now: new Date("2026-10-28T14:00:00.000Z"),
+    }));
+
+    assert.deepEqual(result, { created: 0, pushed: 0 });
+    assert.equal(state.proactiveEvents?.length, 1);
+    assert.equal(calls.length, 1, "the watcher must respect the prefixed delivery claim");
+  });
+
+  it("still suppresses a notice delivered with the legacy unprefixed watcher key", async () => {
+    const state = stateWithDevices(["https://fcm.example/dev-a"]);
+    const supabase = fakeSupabase(state);
+    const { send, calls } = recordingSender();
+    const opts = announceOpts(send);
+    await announce(supabase, USER, { ...opts, hasPush: false });
+    state.deliveries.push({
+      user_id: USER,
+      event_key: opts.eventKey,
+      category: opts.category,
+      last_sent_at: "2026-10-28T10:00:00.000Z",
+    });
+
+    const result = await announce(supabase, USER, opts);
+
+    assert.deepEqual(result, { created: 0, pushed: 0 });
+    assert.equal(calls.length, 0);
+  });
+
+  it("shares one claim when the watcher races an MT5 feed push still awaiting dispatch", async () => {
+    const state = stateWithDevices(["https://fcm.example/dev-a"]);
+    const supabase = fakeSupabase(state);
+    const { send, calls } = recordingSender();
+    const opts = announceOpts(send);
+    let resumeFeed!: () => void;
+    let feedReady!: () => void;
+    const paused = new Promise<void>((resolve) => { resumeFeed = resolve; });
+    const ready = new Promise<void>((resolve) => { feedReady = resolve; });
+
+    const feed = recordProactiveFeedEvent(
+      supabase, USER, opts.eventKey, drawdownNotice.title, "Loss limit close", "/positions",
+      {
+        category: "risk_alert",
+        dispatch: async (input) => {
+          feedReady();
+          await paused;
+          return dispatchPushEvent({ ...input, supabase, send, now: opts.now });
+        },
+      },
+    );
+    // The feed insert has won, but its producer has not claimed the push yet.
+    await ready;
+    const watcher = await announce(supabase, USER, opts);
+    resumeFeed();
+    await feed;
+
+    assert.deepEqual(watcher, { created: 0, pushed: 1 });
+    assert.equal(state.proactiveEvents?.length, 1);
+    assert.equal(state.deliveries.length, 1);
+    assert.equal(state.deliveries[0].event_key, `feed:${opts.eventKey}`);
+    assert.equal(calls.length, 1, "both producers must use the same push claim");
+  });
+
+  it("does not repeat an existing notice when the delivery ledger is unavailable", async () => {
+    const state = stateWithDevices(["https://fcm.example/dev-a"]);
+    state.deliveriesTableMissing = true;
+    const supabase = fakeSupabase(state);
+    const { send, calls } = recordingSender();
+
+    const first = await announce(supabase, USER, announceOpts(send));
+    const again = await announce(supabase, USER, announceOpts(send));
+
+    assert.deepEqual(first, { created: 1, pushed: 1 });
+    assert.deepEqual(again, { created: 0, pushed: 0 });
+    assert.equal(calls.length, 1);
+  });
+
+  it("sends only once when two watcher runs retry the failed notice together", async () => {
+    const endpoint = "https://fcm.example/dev-a";
+    const state = stateWithDevices([endpoint]);
+    const supabase = fakeSupabase(state);
+    const failed = recordingSender({ [endpoint]: 503 });
+    await announce(supabase, USER, announceOpts(failed.send));
+
+    const retry = recordingSender();
+    const results = await Promise.all([
+      announce(supabase, USER, announceOpts(retry.send, {
+        now: new Date("2026-10-28T12:01:00.000Z"),
+      })),
+      announce(supabase, USER, announceOpts(retry.send, {
+        now: new Date("2026-10-28T12:01:00.500Z"),
+      })),
+    ]);
+
+    assert.equal(results.reduce((sum, result) => sum + result.created, 0), 0);
+    assert.equal(results.reduce((sum, result) => sum + result.pushed, 0), 1);
+    assert.equal(state.proactiveEvents?.length, 1);
+    assert.equal(state.deliveries.length, 1);
+    assert.equal(retry.calls.length, 1);
   });
 
   it("records the notice in the feed but sends nothing when the trader has push off", async () => {

@@ -15,7 +15,7 @@ import type { ChatQuotaPayload } from "@/lib/chatQuota";
 export default async function ChatPage({
   searchParams,
 }: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const params = await searchParams;
   const chatType = params?.intel === "1" ? "intel" : "axe";
